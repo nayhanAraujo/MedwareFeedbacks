@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+
+{% block title %}Usuários Cadastrados{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Usuários Cadastrados</h2>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+    </div>
+  {% endfor %}
+{% endwith %}
+
+<script>
+  setTimeout(() => {
+    const alert = document.querySelector('.alert');
+    if (alert) {
+      alert.classList.remove('show');
+      alert.classList.add('hide');
+    }
+  }, 3000);
+</script>
+
+<form method="get" class="row g-3 mb-4">
+  <div class="col-md-4">
+    <label for="nome" class="form-label">Nome</label>
+    <input type="text" id="nome" name="nome" value="{{ request.args.get('nome', '') }}" class="form-control" placeholder="Buscar por nome">
+  </div>
+
+  <div class="col-md-4">
+    <label for="setor" class="form-label">Setor</label>
+    <select name="setor" id="setor" class="form-select">
+      <option value="">Todos os setores</option>
+      {% for s in setores %}
+        <option value="{{ s.nome }}" {% if request.args.get('setor') == s.nome %}selected{% endif %}>{{ s.nome }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="col-md-2 d-flex align-items-end">
+    <button type="submit" class="btn btn-primary w-100">Filtrar</button>
+  </div>
+</form>
+
+
+<table class="table table-bordered table-striped">
+  <thead class="table-light">
+    <tr>
+      <th>Nome</th>
+      <th>E-mail</th>
+      <th>Cargo</th>
+      <th>Setor</th>
+      <th>Admin</th>
+      <th style="width: 150px;">Ações</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in usuarios  %}
+   
+    <tr>
+      <td>{{ u.nome }}</td>
+      <td>{{ u.email }}</td>
+      <td>{{ u.cargo }}</td>
+      <td>{{ u.setor.nome }}</td>
+      <td>
+        {% if u.is_admin %}
+          <span class="badge bg-success">Sim</span>
+        {% else %}
+          <span class="badge bg-secondary">Não</span>
+        {% endif %}
+      </td>
+      <td>
+        <a href="{{ url_for('editar_usuario', id=u.id) }}" class="btn btn-sm btn-outline-primary me-2">Editar</a>
+        <button class="btn btn-sm btn-outline-danger"
+                data-bs-toggle="modal"
+                data-bs-target="#modalExcluir"
+                data-id="{{ u.id }}"
+                data-nome="{{ u.nome }}">
+          Excluir
+        </button>
+      </td>
+      
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- Modal de confirmação de exclusão -->
+<div class="modal fade" id="modalExcluir" tabindex="-1" aria-labelledby="modalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content rounded-4 shadow">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalLabel">Confirmar Exclusão</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        Tem certeza que deseja excluir o usuário <strong id="nomeUsuarioExclusao"></strong>?
+      </div>
+      <div class="modal-footer">
+        <form method="GET" id="formExclusaoUsuario">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-danger">Excluir</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const modal = document.getElementById('modalExcluir')
+  modal.addEventListener('show.bs.modal', function (event) {
+    const button = event.relatedTarget
+    const id = button.getAttribute('data-id')
+    const nome = button.getAttribute('data-nome')
+
+    const nomeSpan = modal.querySelector('#nomeUsuarioExclusao')
+    const form = modal.querySelector('#formExclusaoUsuario')
+
+    nomeSpan.textContent = nome
+    form.action = `/usuario/${id}/excluir`
+  })
+</script>
+{% endblock %}

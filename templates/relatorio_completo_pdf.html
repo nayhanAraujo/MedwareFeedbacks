@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12px; line-height: 1.4; margin: 20px; }
+    h1, h2, h3 { color: #333; }
+    .subtitulo { font-weight: bold; margin-top: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    .item-avaliacao { margin-left: 20px; margin-bottom: 10px; }
+    .section-divider { page-break-before: always; }
+    .text-muted { color: #666; font-style: italic; }
+    .chart-container { margin: 20px 0; text-align: center; }
+    .chart-container img { max-width: 80%; height: auto; }
+  </style>
+</head>
+<body>
+  <h1>Relatório Completo de Avaliações</h1>
+  <p class="text-muted">
+    Filtros aplicados:
+    {% if setor_filtro %}Setor: {{ setor_filtro }}{% endif %}
+    {% if nome_filtro %}, Nome: {{ nome_filtro }}{% endif %}
+    {% if media_min %}, Média Mínima: {{ media_min }}{% endif %}
+    {% if media_max %}, Média Máxima: {{ media_max }}{% endif %}
+    {% if not setor_filtro and not nome_filtro and not media_min and not media_max %}Nenhum{% endif %}
+  </p>
+
+  <!-- Seção de Gráficos -->
+  <h2>Visão Geral</h2>
+  <div class="chart-container">
+    {% if bar_chart_base64 %}
+      <h3>Média por Colaborador</h3>
+      <img src="data:image/png;base64,{{ bar_chart_base64 }}" alt="Gráfico de Média por Colaborador">
+    {% else %}
+      <p class="text-muted">Nenhum dado disponível para o gráfico de média por colaborador.</p>
+    {% endif %}
+  </div>
+  <div class="chart-container">
+    {% if pie_chart_base64 %}
+      <h3>Distribuição de Médias</h3>
+      <img src="data:image/png;base64,{{ pie_chart_base64 }}" alt="Gráfico de Distribuição de Médias">
+    {% else %}
+      <p class="text-muted">Nenhum dado disponível para o gráfico de distribuição.</p>
+    {% endif %}
+  </div>
+
+  <div class="section-divider"></div>
+
+  <!-- Resumo por Colaborador -->
+  <h2>Resumo por Colaborador</h2>
+  {% if dados_dashboard %}
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Cargo</th>
+          <th>Setor</th>
+          <th>Qtd. Avaliações</th>
+          <th>Média Geral</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in dados_dashboard %}
+        <tr>
+          <td>{{ d.nome }}</td>
+          <td>{{ d.cargo }}</td>
+          <td>{{ d.setor }}</td>
+          <td>{{ d.total_avaliacoes }}</td>
+          <td>{{ d.media_geral }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="text-muted">Nenhum colaborador com avaliações encontrado para os filtros aplicados.</p>
+  {% endif %}
+
+  <div class="section-divider"></div>
+
+  <!-- Detalhamento das Avaliações -->
+  <h2>Detalhamento das Avaliações</h2>
+  {% if dados_avaliacoes %}
+    {% for av in dados_avaliacoes %}
+      <p class="subtitulo">{{ av.funcionario }} - Avaliado por {{ av.avaliador }} em {{ av.data }}</p>
+      <ul class="item-avaliacao">
+        {% for item in av.itens %}
+          <li><strong>{{ item.nome_habilidade }}</strong>: {{ item.nota }}/5 ({{ item.categoria }})</li>
+        {% endfor %}
+      </ul>
+      {% if av.observacoes %}
+      <p class="item-avaliacao"><strong>Observações:</strong> {{ av.observacoes }}</p>
+      {% endif %}
+    {% endfor %}
+  {% else %}
+    <p class="text-muted">Nenhuma avaliação encontrada para os filtros aplicados.</p>
+  {% endif %}
+
+  <div class="section-divider"></div>
+
+  <!-- Resumo de Habilidades -->
+  <h2>Resumo de Habilidades</h2>
+  {% if resumo_habilidades %}
+    <table>
+      <thead>
+        <tr>
+          <th>Habilidade</th>
+          <th>Categoria</th>
+          <th>Média</th>
+          <th>Total Avaliações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in resumo_habilidades %}
+        <tr>
+          <td>{{ h.nome_habilidade }}</td>
+          <td>{{ h.categoria }}</td>
+          <td>{{ h.media }}</td>
+          <td>{{ h.total }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="text-muted">Nenhum dado de habilidades disponível para os filtros aplicados.</p>
+  {% endif %}
+</body>
+</html>

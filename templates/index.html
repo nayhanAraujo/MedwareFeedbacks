@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block title %}Lista de Feedbacks{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Feedbacks Recebidos</h2>
+
+{% if feedbacks %}
+    <div class="list-group">
+        {% for fb in feedbacks %}
+            <div class="list-group-item">
+                <div class="d-flex w-100 justify-content-between">
+                    <h5 class="mb-1">{{ fb.categoria or 'Sem categoria' }}</h5>
+                    <small>{{ fb.data_envio.strftime('%d/%m/%Y %H:%M') }}</small>
+                </div>
+                <p class="mb-1">{{ fb.texto }}</p>
+                <small>
+                    Enviado por: {{ 'Anônimo' if fb.anonimo else 'Identificado' }}
+                    | Status: <strong>{{ fb.status.capitalize() }}</strong>
+                </small>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <p class="text-muted">Nenhum feedback registrado ainda.</p>
+{% endif %}
+{% endblock %}

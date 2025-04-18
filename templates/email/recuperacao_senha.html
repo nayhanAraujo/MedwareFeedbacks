@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Redefinição de Senha</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; background-color: #f8f9fa;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f8f9fa; padding: 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" border="0" cellspacing="0" cellpadding="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <!-- Cabeçalho -->
+          <tr>
+            <td style="padding: 20px; text-align: center;">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo" style="max-width: 150px; height: auto;">
+                <h1 style="color: #333333; font-size: 24px; margin: 20px 0;">Redefinição de Senha</h1>
+            </td>
+          </tr>
+          <!-- Corpo -->
+          <tr>
+            <td style="padding: 0 30px 20px; color: #333333; font-size: 16px; line-height: 1.5;">
+              <p>Olá, {{ nome_usuario | default('Usuário') }},</p>
+              <p>Recebemos uma solicitação para redefinir a senha da sua conta. Clique no botão abaixo para criar uma nova senha:</p>
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 20px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="{{ reset_url }}" style="display: inline-block; background-color: #0d6efd; color: #ffffff; padding: 12px 24px; border-radius: 4px; text-decoration: none; font-size: 16px; font-weight: bold;">Redefinir Senha</a>
+                  </td>
+                </tr>
+              </table>
+              <p>Este link expira em {{ expiracao }} minutos. Se você não solicitou a redefinição, ignore este e-mail.</p>
+            </td>
+          </tr>
+          <!-- Rodapé -->
+          <tr>
+            <td style="padding: 20px; background-color: #f1f3f5; border-radius: 0 0 8px 8px; text-align: center; color: #6c757d; font-size: 14px;">
+              <p>Se precisar de ajuda, entre em contato com nossa equipe em <a href="mailto:demandas@medware.com.br" style="color: #0d6efd; text-decoration: none;">demandas@medware.com.br</a>.</p>
+              <p>© {{ ano_atual }} Medware Sistema Médicos. Todos os direitos reservados.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

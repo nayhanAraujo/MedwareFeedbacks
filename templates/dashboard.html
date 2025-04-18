@@ -1,0 +1,320 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard de Colaboradores{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-3">
+  <h2 class="mb-4">Dashboard de Avaliações</h2>
+
+  <!-- Seção compacta de KPIs -->
+  <div class="row row-cols-1 row-cols-md-2 row-cols-xl-4 g-3 mb-4">
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body p-3 text-center">
+          <h6 class="card-title text-muted mb-1">Total Colaboradores</h6>
+          <h3 class="mb-0">{{ total_colaboradores }}</h3>
+          <small class="text-muted">ativos</small>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body p-3 text-center">
+          <h6 class="card-title text-muted mb-1">Média Geral</h6>
+          <h3 class="mb-0">{{ media_geral }}</h3>
+          <small class="text-muted">(1-5)</small>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body p-3 text-center">
+          <h6 class="card-title text-muted mb-1">Avaliados</h6>
+          <h3 class="mb-0">{{ dados|length }}</h3>
+          <small class="text-muted">
+            {% if total_colaboradores > 0 and dados|length > 0 %}
+              {{ (dados|length/total_colaboradores*100)|round(1) }}%
+            {% else %}
+              0%
+            {% endif %}
+          </small>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body p-3 text-center">
+          <h6 class="card-title text-muted mb-1">Média Avaliados</h6>
+          <h3 class="mb-0">
+            {{ (dados | sum(attribute='media_geral') / dados|length if dados|length > 0 else 0)|round(2) }}
+          </h3>
+          <small class="text-muted">últimas avaliações</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gráficos lado a lado -->
+  <div class="row g-3 mb-4">
+    <div class="col-lg-8">
+      <div class="card shadow-sm h-100">
+        <div class="card-body p-3">
+          <h5 class="card-title mb-2">Média por Colaborador</h5>
+          <div style="height: 250px">
+            <canvas id="graficoMedia"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-body p-3">
+          <h5 class="card-title mb-2">Distribuição</h5>
+          <div style="height: 250px">
+            <canvas id="graficoPizza"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabela compacta com scroll -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body p-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h5 class="card-title mb-0">Detalhes</h5>
+        <div>
+          <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" href="#filtros" role="button" aria-expanded="false" aria-controls="filtros" data-bs-toggle="tooltip" data-bs-placement="top" title="Mostrar/Ocultar Filtros">
+            <i class="bi bi-funnel"></i> Filtros
+          </button>
+          <form method="get" action="{{ url_for('exportar_relatorio_completo') }}" class="d-inline" target="_blank">
+            <input type="hidden" name="setor" value="{{ request.args.get('setor', '') }}">
+            <input type="hidden" name="nome" value="{{ request.args.get('nome', '') }}">
+            <input type="hidden" name="media_min" value="{{ request.args.get('media_min', '') }}">
+            <input type="hidden" name="media_max" value="{{ request.args.get('media_max', '') }}">
+<button type="submit" class="btn btn-sm btn-outline-danger ms-2" id="btnExportar" data-bs-toggle="tooltip" data-bs-placement="top" title="Exportar relatório com gráficos e avaliações filtradas em PDF (abre em nova aba)">              <span id="btnText"><i class="bi bi-download"></i> Exportar PDF</span>
+              <span id="btnSpinner" class="spinner-border spinner-border-sm d-none ms-2" role="status" aria-hidden="true"></span>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Filtros (colapsável) -->
+      <div class="collapse" id="filtros">
+        <form method="get" action="" class="mb-4 p-3 bg-light rounded">
+          <div class="row g-3">
+            <!-- Filtro por Setor -->
+            <div class="col-md-3">
+              <label class="form-label">Setor</label>
+              <select name="setor" class="form-select">
+                <option value="">Todos os Setores</option>
+                {% for setor in setores %}
+                  <option value="{{ setor.nome }}" {% if setor_filtro == setor.nome %}selected{% endif %}>
+                    {{ setor.nome }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            
+            <!-- Filtro por Nome -->
+            <div class="col-md-3">
+              <label class="form-label">Nome do Colaborador</label>
+              <input type="text" name="nome" class="form-control" placeholder="Buscar por nome" value="{{ request.args.get('nome', '') }}">
+            </div>
+            
+            <!-- Filtro por Média Mínima -->
+            <div class="col-md-2">
+              <label class="form-label">Média mínima</label>
+              <input type="number" name="media_min" class="form-control" placeholder="0" min="0" max="5" step="0.1" value="{{ request.args.get('media_min', '') }}">
+            </div>
+            
+            <!-- Filtro por Média Máxima -->
+            <div class="col-md-2">
+              <label class="form-label">Média máxima</label>
+              <input type="number" name="media_max" class="form-control" placeholder="5" min="0" max="5" step="0.1" value="{{ request.args.get('media_max', '') }}">
+            </div>
+            
+            <!-- Botões -->
+            <div class="col-md-2 d-flex align-items-end">
+              <button type="submit" class="btn btn-primary me-2">Filtrar</button>
+              <a href="{{ url_for('dashboard_colaboradores') }}" class="btn btn-outline-secondary">Limpar</a>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+        <table class="table table-sm table-hover" id="tabelaAvaliacoes">
+          <thead style="position: sticky; top: 0; background: white; z-index: 1;">
+            <tr>
+              <th>Nome</th>
+              <th>Cargo</th>
+              <th>Setor</th>
+              <th class="text-end">Aval.</th>
+              <th class="text-end">Média</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in dados %}
+            <tr>
+              <td>{{ d.nome }}</td>
+              <td>{{ d.cargo }}</td>
+              <td>{{ d.setor }}</td>
+              <td class="text-end">{{ d.total_avaliacoes }}</td>
+              <td class="text-end">
+                <span class="badge bg-{{ 'success' if d.media_geral >= 4 else 'warning' if d.media_geral >= 2.5 else 'danger' }}">
+                  {{ d.media_geral }}
+                </span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts dos gráficos -->
+<script>
+  // Configuração do gráfico de barras
+  const ctx = document.getElementById('graficoMedia');
+  let graficoMedia = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: {{ dados | map(attribute='nome') | list | tojson }},
+      datasets: [{
+        label: 'Média Geral',
+        data: {{ dados | map(attribute='media_geral') | list | tojson }},
+        borderWidth: 1,
+        backgroundColor: 'rgba(13, 110, 253, 0.7)',
+        borderColor: 'rgba(13, 110, 253, 1)'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 5,
+          ticks: {
+            stepSize: 1
+          }
+        }
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return `Média: ${context.raw.toFixed(2)}`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // Função para mudar tipo do gráfico
+  function changeChartType(type) {
+    graficoMedia.destroy();
+    graficoMedia = new Chart(ctx, {
+      type: type,
+      data: graficoMedia.data,
+      options: graficoMedia.options
+    });
+  }
+
+  // Gráfico de pizza para distribuição
+  const ctxPizza = document.getElementById('graficoPizza');
+  new Chart(ctxPizza, {
+    type: 'pie',
+    data: {
+      labels: ['1-2 Estrelas', '2.5-3.5 Estrelas', '4-5 Estrelas'],
+      datasets: [{
+        data: [
+          {{ dados | selectattr('media_geral', 'le', 2) | list | length }},
+          {{ dados | selectattr('media_geral', 'gt', 2) | selectattr('media_geral', 'lt', 4) | list | length }},
+          {{ dados | selectattr('media_geral', 'ge', 4) | list | length }}
+        ],
+        backgroundColor: [
+          'rgba(220, 53, 69, 0.7)',
+          'rgba(255, 193, 7, 0.7)',
+          'rgba(25, 135, 84, 0.7)'
+        ],
+        borderColor: [
+          'rgba(220, 53, 69, 1)',
+          'rgba(255, 193, 7, 1)',
+          'rgba(25, 135, 84, 1)'
+        ],
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom'
+        }
+      }
+    }
+  });
+
+  // Função para ver detalhes (exemplo)
+  function verDetalhes(id) {
+    alert(`Detalhes do colaborador ID: ${id}`);
+  }
+
+  // Lógica para exportar PDF em nova aba
+  const formExport = document.querySelector('form[action="{{ url_for('exportar_relatorio_completo') }}"]');
+  const btnExport = document.getElementById('btnExportar');
+  const btnText = document.getElementById('btnText');
+  const btnSpinner = document.getElementById('btnSpinner');
+
+  formExport.addEventListener('submit', (e) => {
+    e.preventDefault(); // Impede envio padrão do formulário
+    btnExport.disabled = true;
+    btnText.textContent = 'Exportando Relatório...';
+    btnSpinner.classList.remove('d-none');
+
+    // Construir a URL com parâmetros
+    const params = new URLSearchParams({
+      setor: formExport.querySelector('input[name="setor"]').value,
+      nome: formExport.querySelector('input[name="nome"]').value,
+      media_min: formExport.querySelector('input[name="media_min"]').value,
+      media_max: formExport.querySelector('input[name="media_max"]').value
+    });
+    const exportUrl = '{{ url_for("exportar_relatorio_completo") }}?' + params.toString();
+
+    // Abrir nova aba após o delay
+    setTimeout(() => {
+      window.open(exportUrl, '_blank');
+      // Reativar o botão após abrir a aba
+      btnExport.disabled = false;
+      btnText.textContent = 'Exportando Relatório...';
+      btnSpinner.classList.add('d-none');
+    }, 2500);
+  });
+
+  // Inicializar tooltips
+  document.addEventListener('DOMContentLoaded', function () {
+    const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+  });
+</script>
+
+<script>
+  $(document).ready(function() {
+    $('#tabelaAvaliacoes').DataTable({
+      language: {
+        url: '//cdn.datatables.net/plug-ins/1.13.4/i18n/pt-BR.json'
+      }
+    });
+  });
+</script>
+{% endblock %}

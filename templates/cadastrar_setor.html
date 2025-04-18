@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Cadastrar Setor{% endblock %}
+{% block content %}
+<h2 class="mb-4">Cadastrar Novo Setor</h2>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+    </div>
+  {% endfor %}
+{% endwith %}
+
+<form method="POST">
+  <div class="mb-3">
+    <label for="nome" class="form-label">Nome do Setor</label>
+    <input type="text" class="form-control" id="nome" name="nome" required>
+  </div>
+  <button type="submit" class="btn btn-primary">Salvar</button>
+  <a href="{{ url_for('bibliotecas') }}" class="btn btn-secondary ms-2">Cancelar</a>
+</form>
+{% endblock %}

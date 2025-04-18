@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block title %}Cadastrar Usuário{% endblock %}
+{% block content %}
+<h2 class="mb-4">Cadastrar Novo Usuário</h2>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+    </div>
+  {% endfor %}
+{% endwith %}
+
+<form method="POST">
+  <div class="mb-3">
+    <label for="nome" class="form-label">Nome</label>
+    <input type="text" class="form-control" id="nome" name="nome" required>
+  </div>
+
+  <div class="mb-3">
+    <label for="email" class="form-label">E-mail</label>
+    <input type="email" class="form-control" id="email" name="email" required>
+  </div>
+
+  <div class="mb-3">
+    <label for="senha" class="form-label">Senha</label>
+    <input type="password" class="form-control" id="senha" name="senha" required>
+  </div>
+
+  <div class="mb-3">
+    <label for="cargo" class="form-label">Cargo</label>
+
+    <select name="cargo" id="cargo" class="form-select" required>
+        <option value="">Selecione o cargo</option>
+        <option value="Gerente">Gerente</option>
+        <option value="Supervisor">Supervisor</option>
+        <option value="Técnico">Técnico</option>
+
+      </select>
+      
+</div>
+
+  <div class="mb-3">
+    <label for="setor" class="form-label">Setor</label>
+    <select name="setor" id="setor" class="form-select" required>
+      <option value="">Selecione um setor</option>
+      {% for s in setores %}
+      <option value="{{ s.id }}">{{ s.nome }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="form-check mb-3">
+    <input class="form-check-input" type="checkbox" name="is_admin" id="is_admin">
+    <label class="form-check-label" for="is_admin">
+      Usuário Administrador
+    </label>
+  </div>
+
+  <button type="submit" class="btn btn-primary">Salvar</button>
+  <a href="{{ url_for('bibliotecas') }}" class="btn btn-secondary ms-2">Cancelar</a>
+</form>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+
+{% block title %}Enviar Feedback{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Enviar Feedback</h2>
+
+<form method="POST" action="{{ url_for('feedback') }}">
+    <div class="mb-3">
+        <label for="categoria" class="form-label">Categoria</label>
+        <select class="form-select" id="categoria" name="categoria">
+            <option value="">Selecione</option>
+            <option value="Liderança">Liderança</option>
+            <option value="Processos">Processos</option>
+            <option value="Ambiente">Ambiente</option>
+            <option value="Tecnologia">Tecnologia</option>
+        </select>
+    </div>
+
+    <div class="mb-3">
+        <label for="texto" class="form-label">Mensagem</label>
+        <textarea class="form-control" id="texto" name="texto" rows="5" required></textarea>
+    </div>
+
+    <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" id="anonimo" name="anonimo">
+        <label class="form-check-label" for="anonimo">Enviar como anônimo</label>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Enviar</button>
+</form>
+{% endblock %}

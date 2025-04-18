@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+
+{% block title %}Gerenciar Habilidades{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Gerenciar Habilidades</h2>
+
+<!-- Cadastro de nova categoria -->
+<form method="POST" class="row g-3 mb-4">
+  <div class="col-md-6">
+    <label class="form-label">Nova Categoria</label>
+    <input type="text" name="nova_categoria" class="form-control" placeholder="Nome da nova categoria" required>
+  </div>
+  <div class="col-md-2 d-flex align-items-end">
+    <button type="submit" class="btn btn-primary">Adicionar Categoria</button>
+  </div>
+</form>
+
+<!-- Cadastro de nova habilidade -->
+<form method="POST" class="row g-3 mb-4">
+  <div class="col-md-6">
+    <label class="form-label">Nova Habilidade</label>
+    <input type="text" name="nome_habilidade" class="form-control" placeholder="Nome da habilidade" required>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label">Categoria</label>
+    <select name="categoria_id" class="form-select" required>
+      <option value="">Selecione...</option>
+      {% for cat in categorias %}
+        <option value="{{ cat.id }}">{{ cat.nome }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-2 d-flex align-items-end">
+    <button type="submit" class="btn btn-success">Adicionar Habilidade</button>
+  </div>
+</form>
+
+<!-- Listagem por categoria -->
+{% for categoria, habilidades in habilidades_por_categoria.items() %}
+  <div class="card mb-4" id="categoria-{{ categoria.id }}">
+    <div class="card-header bg-secondary text-white fw-bold d-flex justify-content-between align-items-center">
+      <span>{{ categoria.nome }}</span>
+      <button type="button" class="btn btn-sm btn-outline-danger" title="Excluir Categoria" data-bs-toggle="tooltip" data-bs-placement="top" onclick="confirmarExclusao('categoria', {{ categoria.id }}, '{{ categoria.nome | e }}')">
+        <i class="bi bi-trash"></i>
+      </button>
+    </div>
+    <div class="card-body">
+      {% if habilidades %}
+        <ul class="list-group">
+          {% for h in habilidades %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              <div>
+                <strong>{{ h.nome }}</strong>
+                <br>
+                <span class="badge bg-secondary">{{ 'Ativa' if h.ativa else 'Inativa' }}</span>
+              </div>
+              <div class="btn-group">
+                <a href="{{ url_for('editar_habilidade', id=h.id) }}" class="btn btn-sm btn-outline-primary" title="Editar">
+                  <i class="bi bi-pencil"></i>
+                </a>
+                <button type="button" class="btn btn-sm btn-outline-warning" title="Ativar/Inativar" onclick="toggleHabilidade({{ h.id }})">
+                  <i class="bi bi-eye{{ '' if h.ativa else '-slash' }}"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-danger" title="Excluir" onclick="confirmarExclusao('habilidade', {{ h.id }}, '{{ h.nome | e }}')">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-muted mb-0">Nenhuma habilidade cadastrada nesta categoria. Use o formulário acima para adicionar uma habilidade.</p>
+      {% endif %}
+    </div>
+  </div>
+{% endfor %}
+
+<!-- Modal de confirmação para exclusão -->
+<div class="modal fade" id="modalExcluir" tabindex="-1" aria-labelledby="modalExcluirLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalExcluirLabel">Confirmar Exclusão</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body" id="modalExcluirBody">
+        <!-- Mensagem será preenchida dinamicamente pelo JavaScript -->
+      </div>
+      <div class="modal-footer">
+        <form id="formExcluir" method="POST" action="">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-danger" id="btnConfirmarExclusao">
+            <span id="btnExcluirText">Confirmar Exclusão</span>
+            <span id="btnExcluirSpinner" class="spinner-border spinner-border-sm d-none"></span>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Função para confirmar exclusão com tratamento de erro
+async function confirmarExclusao(tipo, id, nome) {
+  const modal = new bootstrap.Modal(document.getElementById('modalExcluir'));
+  const btnExcluir = document.getElementById('btnConfirmarExclusao');
+  const btnText = document.getElementById('btnExcluirText');
+  const btnSpinner = document.getElementById('btnExcluirSpinner');
+  const modalBody = document.getElementById('modalExcluirBody');
+
+  // Definir a mensagem do modal com base no tipo
+  if (tipo === 'habilidade') {
+    modalBody.innerHTML = `Tem certeza que deseja excluir a habilidade <strong>${nome}</strong>?`;
+    document.getElementById('formExcluir').action = `/habilidade/${id}/excluir`;
+  } else if (tipo === 'categoria') {
+    modalBody.innerHTML = `Tem certeza que deseja excluir a categoria <strong>${nome}</strong>? Todas as habilidades associadas também serão excluídas.`;
+    document.getElementById('formExcluir').action = `/categoria/${id}/excluir`;
+  }
+
+  modal.show();
+
+  // Resetar estado do botão quando o modal é fechado
+  document.getElementById('modalExcluir').addEventListener('hidden.bs.modal', () => {
+    btnExcluir.disabled = false;
+    btnText.textContent = 'Confirmar Exclusão';
+    btnSpinner.classList.add('d-none');
+    modalBody.innerHTML = ''; // Limpar o corpo do modal
+  }, { once: true });
+}
+
+// Função para alternar status com feedback
+async function toggleHabilidade(id) {
+  try {
+    const btn = document.querySelector(`button[onclick="toggleHabilidade(${id})"]`);
+    const icon = btn.querySelector('i');
+    
+    // Mostrar estado de loading
+    btn.disabled = true;
+    icon.classList.add('d-none');
+    btn.insertAdjacentHTML('beforeend', '<span class="spinner-border spinner-border-sm"></span>');
+    
+    const response = await fetch(`/habilidade/${id}/alternar`, { 
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) throw new Error('Falha na requisição');
+    window.location.reload();
+    
+  } catch (error) {
+    console.error('Erro:', error);
+    alert('Ocorreu um erro ao alternar o status');
+    window.location.reload();
+  }
+}
+</script>
+{% endblock %}

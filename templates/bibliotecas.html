@@ -1,0 +1,137 @@
+{% extends 'base.html' %}
+{% block title %}Bibliotecas{% endblock %}
+{% block content %}
+<h2 class="mb-4">Bibliotecas</h2>
+
+<div class="accordion" id="accordionBibliotecas">
+  <div class="accordion-item">
+    <h2 class="accordion-header" id="headingGeral">
+      <button class="accordion-button bg-light fw-bold text-dark position-relative toggle-icon-accordion" type="button" data-bs-toggle="collapse" data-bs-target="#collapseGeral" aria-expanded="true">
+        <i class="bi bi-grid me-2"></i> Módulos Principais
+      </button>
+    </h2>
+    <div id="collapseGeral" class="accordion-collapse collapse show" >
+      <div class="accordion-body">
+        <div class="row">
+          <div class="col-md-3 mb-4">
+            <a href="{{ url_for('dashboard_colaboradores') }}" class="text-decoration-none">
+              <div class="card text-white bg-primary shadow-sm text-center p-4 card-hover" style="height: 160px; display: flex; flex-direction: column; justify-content: center;" >
+                <i class="bi bi-bar-chart fs-1 mb-2"></i>
+                <h5 class="mb-0">Dashboard</h5>
+              </div>
+            </a>
+          </div>
+          <div class="col-md-3 mb-4">
+            <a href="{{ url_for('avaliar_funcionario') }}" class="text-decoration-none">
+              <div class="card text-white bg-primary shadow-sm text-center p-4 card-hover" style="height: 160px; display: flex; flex-direction: column; justify-content: center;">
+                <i class="bi bi-pencil-square fs-1 mb-2"></i>
+                <h5 class="mb-0">Avaliar</h5>
+              </div>
+            </a>
+          </div>
+          <div class="col-md-3 mb-4">
+            <a href="{{ url_for('listar_avaliacoes') }}" class="text-decoration-none">
+              <div class="card text-white bg-primary shadow-sm text-center p-4 card-hover" style="height: 160px; display: flex; flex-direction: column; justify-content: center;">
+                <i class="bi bi-list-check fs-1 mb-2"></i>
+                <h5 class="mb-0">Avaliações</h5>
+              </div>
+            </a>
+          </div>
+       
+     
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="accordion-item">
+    <h2 class="accordion-header" id="headingFerramentas">
+      <button class="accordion-button bg-light fw-bold text-dark position-relative toggle-icon-accordion" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFerramentas" >
+        <i class="bi bi-tools me-2"></i> Manutenções
+      </button>
+    </h2>
+    <div id="collapseFerramentas" class="accordion-collapse collapse show" data-bs-parent="#accordionBibliotecas">
+      <div class="accordion-body">
+        <div class="row">
+      
+          
+          
+          <div class="col-md-3 mb-4">
+            <a href="{{ url_for('listar_usuarios') }}" class="text-decoration-none">
+              <div class="ard text-white bg-dark shadow-sm text-center p-4 card-hover" style="height: 160px; display: flex; flex-direction: column; justify-content: center;">
+                <i class="bi bi-person-lines-fill fs-1 mb-2"></i>
+                <h5 class="mb-0">Usuários Cadastrados</h5>
+              </div>
+            </a>
+          </div>
+
+
+          <div class="col-md-3 mb-4">
+            <a href="{{ url_for('gerenciar_habilidades') }}" class="text-decoration-none">
+              <div class="ard text-white bg-dark shadow-sm text-center p-4 card-hover" style="height: 160px; display: flex; flex-direction: column; justify-content: center;">
+                <i class="bi bi-wrench-adjustable fs-1 mb-2"></i>
+                <h5 class="mb-0">Manutenção de Habilidades</h5>
+              </div>
+            </a>
+          </div>
+          <div class="col-md-3 mb-4">
+            <a href="{{ url_for('cadastrar_usuario') }}?origem=biblioteca" class="text-decoration-none">
+              <div class="card text-white bg-dark shadow-sm text-center p-4 card-hover" style="height: 160px; display: flex; flex-direction: column; justify-content: center;">
+                <i class="bi bi-person-plus-fill fs-1 mb-2"></i>
+                <h5 class="mb-0">Cadastrar Usuário</h5>
+              </div>
+            </a>
+          </div>
+          <div class="col-md-3 mb-4">
+            <a href="{{ url_for('cadastrar_setor') }}" class="text-decoration-none">
+              <div class="card text-white bg-dark shadow-sm text-center p-4 card-hover" style="height: 160px; display: flex; flex-direction: column; justify-content: center;">
+                <i class="bi bi-building-add fs-1 mb-2"></i>
+                <h5 class="mb-0">Cadastrar Setor</h5>
+              </div>
+            </a>
+          </div>
+
+          <div class="col-md-3 mb-4">
+            <a href="{{ url_for('gerenciar_notas') }}" class="text-decoration-none">
+              <div class="card text-white bg-dark shadow-sm text-center p-4 card-hover" style="height: 160px; display: flex; flex-direction: column; justify-content: center;">
+                <i class="bi bi-123 fs-1 mb-2"></i>
+                <h5 class="mb-0">Manutenção de Notas</h5>
+              </div>
+            </a>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="accordion-item">
+    <h2 class="accordion-header" id="headingConfig">
+      <button class="accordion-button bg-light fw-bold text-dark position-relative toggle-icon-accordion" type="button" data-bs-toggle="collapse" data-bs-target="#collapseConfig">
+        <i class="bi bi-gear me-2"></i> Configurações
+      </button>
+    </h2>
+    <div id="collapseConfig" class="accordion-collapse collapse show" data-bs-parent="#accordionBibliotecas">
+      <div class="accordion-body">
+        <div class="row">
+          <div class="col-md-3 mb-4">
+            <a href="#" class="text-decoration-none">
+              <div class="card text-white bg-secondary shadow-sm text-center p-4 card-hover" style="height: 160px; display: flex; flex-direction: column; justify-content: center;">
+                <i class="bi bi-sliders2 fs-1 mb-2"></i>
+                <h5 class="mb-0">Preferências</h5>
+              </div>
+
+              
+            </a>
+          </div>
+          
+     
+
+    
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

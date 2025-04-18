@@ -1,0 +1,59 @@
+
+
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Avaliações - PDF</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; }
+        h2 { text-align: center; }
+        .avaliacao { margin-bottom: 40px; }
+        .item { margin-left: 20px; font-size: 14px; }
+        .item span { font-weight: bold; }
+        hr { border: none; border-top: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+    <h2>Avaliações de Colaboradores</h2>
+    {% for av in avaliacoes %}
+        <div class="avaliacao">
+            <p><strong>Funcionário:</strong> {{ av.funcionario }}</p>
+            <p><strong>Avaliador:</strong> {{ av.avaliador }}</p>
+            <p><strong>Data:</strong> {{ av.data }}</p>
+            <p><strong>Observações:</strong> {{ av.observacoes or '---' }}</p>
+            <p><strong>Notas:</strong></p>
+            <ul>
+                {% for item in av.itens %}
+                    <li class="item"><span>{{ item.nome_habilidade }}:</span> {{ item.nota }}/5 ({{ item.categoria }})</li>
+                {% endfor %}
+            </ul>
+            <hr>
+        </div>
+    {% endfor %}
+
+    <table>
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>Cargo</th>
+            <th>Setor</th>
+            <th>Qtd. Avaliações</th>
+            <th>Média Geral</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in dados %}
+          <tr>
+            <td>{{ d.nome }}</td>
+            <td>{{ d.cargo }}</td>
+            <td>{{ d.setor }}</td>
+            <td>{{ d.total_avaliacoes }}</td>
+            <td>{{ d.media_geral }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+</body>
+</html>

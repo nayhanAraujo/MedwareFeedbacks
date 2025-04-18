@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block title %}Notas Permitidas{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Notas Permitidas</h2>
+
+<!-- Mensagens flash (mantido igual) -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+    </div>
+  {% endfor %}
+{% endwith %}
+
+<!-- Formulário (mantido igual) -->
+<form method="POST" class="row g-3 mb-4">
+  <div class="col-md-4">
+    <label class="form-label">Nova Nota Permitida</label>
+    <input type="number" name="valor_nota" class="form-control" step="0.01" min="0" placeholder="Ex: 4.85" required>
+  </div>
+  <div class="col-md-2 d-flex align-items-end">
+    <button type="submit" class="btn btn-primary">Adicionar Nota</button>
+  </div>
+</form>
+
+<div class="accordion mb-3" id="notasAccordion">
+  <div class="accordion-item">
+    <h2 class="accordion-header">
+      <button class="accordion-button bg-light text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapseNotas" aria-expanded="true" aria-controls="collapseNotas">
+        <i class="bi bi-list-check me-2"></i>
+        Notas cadastradas para o setor {{setor.nome}}
+        <span class="badge bg-primary rounded-pill ms-2">{{ notas|length }}</span>
+      </button>
+    </h2>
+    <div id="collapseNotas" class="accordion-collapse collapse" data-bs-parent="#notasAccordion">
+      <div class="accordion-body p-0">
+        {% if notas %}
+          <ul class="list-group list-group-flush">
+            {% for n in notas %}
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                <span class="fw-bold">{{ "%.2f"|format(n.valor) }}</span>
+                <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#confirmDeleteModal" data-note-id="{{ n.id }}">
+                  <i class="bi bi-trash"></i> Excluir
+                </button>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="p-3 text-muted">
+            Nenhuma nota cadastrada ainda.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de Confirmação (mantido igual) -->
+<div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-labelledby="confirmDeleteModalLabel" aria-hidden="true">
+  <!-- ... conteúdo do modal ... -->
+</div>
+
+<script>
+  // Seu script existente pode ser mantido
+  document.addEventListener('DOMContentLoaded', function () {
+    const deleteButtons = document.querySelectorAll('[data-note-id]');
+    deleteButtons.forEach(button => {
+      button.addEventListener('click', function () {
+        const noteId = this.getAttribute('data-note-id');
+        const deleteForm = document.getElementById('deleteForm');
+        deleteForm.action = '{{ url_for("excluir_nota", id=0) }}'.replace('/0', '/' + noteId);
+      });
+    });
+  });
+</script>
+{% endblock %}

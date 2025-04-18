@@ -1,0 +1,178 @@
+{% extends 'base.html' %}
+
+{% block title %}Avaliar Funcionário{% endblock %}
+
+{% block content %}
+
+<h2 class="mb-4">Avaliar Funcionário</h2>
+
+<form method="POST" class="mb-4">
+
+  <div class="row mb-3">
+    <div class="col-md-6">
+      <label for="setor" class="form-label">Filtrar por Setor</label>
+      <select name="setor_filtro" class="form-select" onchange="this.form.submit()">
+        <option value="">Todos os setores</option>
+        {% for s in setores %}
+        <option value="{{ s.id }}" {% if request.form.get('setor_filtro') == s.id|string %}selected{% endif %}>{{ s.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <div class="mb-4">
+    <label for="funcionario" class="form-label">Funcionário</label>
+    <select class="form-select" name="funcionario" required>
+      <option value="">Selecione...</option>
+      {% for f in funcionarios %}
+      <option value="{{ f.id }}">{{ f.nome }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="progress mb-4" style="height: 20px;">
+    <div id="progressBar" class="progress-bar bg-success" role="progressbar" style="width: 0%;">
+      <span id="progressText" class="fw-bold text-white">0%</span>
+    </div>
+  </div>
+<!-- Abas dinâmicas para categorias -->
+<ul class="nav nav-tabs mb-3" id="categoriaTabs" role="tablist">
+  {% for categoria, _ in habilidades_por_categoria.items() %}
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {% if loop.first %}active{% endif %}" id="tab-{{ loop.index }}" data-bs-toggle="tab" data-bs-target="#categoria-{{ loop.index }}" type="button" role="tab">
+        <i class="bi bi-tags me-1"></i> {{ categoria }}
+      </button>
+    </li>
+  {% endfor %}
+</ul>
+
+<!-- Conteúdo das abas -->
+<div class="tab-content">
+  {% for categoria, habilidades in habilidades_por_categoria.items() %}
+    <div class="tab-pane fade {% if loop.first %}show active{% endif %}" id="categoria-{{ loop.index }}" role="tabpanel">
+      <div class="card mb-4">
+        <div class="card-header bg-light fw-bold">
+          <i class="bi bi-tags me-2"></i> {{ categoria }}
+        </div>
+        <div class="card-body">
+          <div class="row">
+            {% for h in habilidades %}
+            <div class="col-md-6 mb-3">
+              <label class="form-label">{{ h.nome }}</label>
+              <select name="cat_{{ h.id }}" class="form-select habilidade" required>
+                <option value="">Selecione...</option>
+                {% for nota in notas_disponiveis %}
+                <option value="{{ nota }}">{{ nota }}</option>
+              {% endfor %}
+              
+              </select>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+
+  <div class="mb-3 mt-4">
+    <label for="observacoes" class="form-label">Observações Gerais</label>
+    <textarea name="observacoes" class="form-control" rows="4"></textarea>
+  </div>
+
+<!-- Modifique o botão para incluir um spinner -->
+<button type="submit" id="btnSalvar" class="btn btn-success">
+  <span id="btnText">Salvar Avaliação</span>
+  <span id="btnSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+</button>
+  <div id="alertaIncompleto" class="alert alert-warning mt-3 d-none" role="alert">
+    Por favor, preencha todas as habilidades antes de salvar a avaliação.
+  </div>
+</form>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const form = document.querySelector('form');
+    const alerta = document.getElementById('alertaIncompleto');
+    const selects = document.querySelectorAll('.habilidade');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const observacoes = document.querySelector('textarea[name="observacoes"]');
+    const btnSalvar = document.getElementById('btnSalvar');
+    const btnText = document.getElementById('btnText');
+    const btnSpinner = document.getElementById('btnSpinner');
+
+    function atualizarProgresso() {
+      let total = selects.length;
+      let preenchidos = 0;
+
+      selects.forEach(s => {
+        if (s.value !== '') preenchidos++;
+      });
+
+      let percentual = Math.round((preenchidos / total) * 100);
+      progressBar.style.width = percentual + '%';
+      progressBar.setAttribute('aria-valuenow', percentual);
+      progressText.innerText = percentual + '%';
+
+      // Muda a cor conforme o progresso
+      if (percentual < 30) {
+        progressBar.className = 'progress-bar bg-danger';
+      } else if (percentual < 70) {
+        progressBar.className = 'progress-bar bg-warning';
+      } else {
+        progressBar.className = 'progress-bar bg-success';
+      }
+    }
+
+    // Atualiza progresso quando qualquer select é alterado
+    selects.forEach(s => {
+      s.addEventListener('change', atualizarProgresso);
+    });
+
+    // Evento de submit do formulário
+    form.addEventListener('submit', function (e) {
+      // Mostrar loading
+      btnSalvar.disabled = true;
+      btnText.textContent = 'Salvando...';
+      btnSpinner.classList.remove('d-none');
+      
+      let total = selects.length;
+      let preenchidos = 0;
+      
+      selects.forEach(s => {
+        if (s.value !== '') preenchidos++;
+      });
+
+      const obsValor = observacoes.value.trim();
+      
+      if (preenchidos < total || !obsValor) {
+        e.preventDefault();
+        
+        // Restaurar botão
+        btnSalvar.disabled = false;
+        btnText.textContent = 'Salvar Avaliação';
+        btnSpinner.classList.add('d-none');
+        
+        alerta.classList.remove('d-none');
+        alerta.textContent = 'Por favor, preencha todas as habilidades e as observações antes de salvar a avaliação.';
+        alerta.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        if (!confirm('Tem certeza que deseja salvar esta avaliação?')) {
+          e.preventDefault();
+          
+          // Restaurar botão
+          btnSalvar.disabled = false;
+          btnText.textContent = 'Salvar Avaliação';
+          btnSpinner.classList.add('d-none');
+        }
+        // Se confirmar, o formulário será submetido normalmente
+      }
+    });
+
+    // Inicializa o progresso
+    atualizarProgresso();
+  });
+</script>
+
+{% endblock %}

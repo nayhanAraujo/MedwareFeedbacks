@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Sistema{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css">
+    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+</head>
+<body class="{% if not usuario %}login-page{% endif %}">
+  
+    {% if usuario %}
+    <div class="layout-wrapper">
+        <div class="sidebar d-flex flex-column">
+            <div class="brand">
+                <i class="bi bi-graph-up-arrow"></i> Feedback360
+            </div>
+
+            <a href="{{ url_for('dashboard_colaboradores') }}" class="nav-link {% if request.endpoint == 'dashboard_colaboradores' %}active{% endif %}"><i class="bi bi-bar-chart-line"></i> Dashboard</a>
+            <a href="{{ url_for('avaliar_funcionario') }}" class="nav-link {% if request.endpoint == 'avaliar_funcionario' %}active{% endif %}"><i class="bi bi-pencil-square"></i> Avaliar</a>
+
+               <a href="{{ url_for('bibliotecas') }}" class="nav-link"><i class="bi bi-journals"></i> Acessar Biblioteca</a>
+
+            <a href="{{ url_for('logout') }}" class="nav-link mt-auto"><i class="bi bi-box-arrow-left"></i> Sair</a>
+        </div>
+
+        <div class="content">
+          {% if g.usuario_logado %}
+<div class="bg-light py-2 px-4 border-bottom text-end">
+  <small class="text-muted">Usuário logado: <strong>{{ g.usuario_logado.nome }}</strong></small>
+</div>
+{% endif %}
+
+  {% block content %}{% endblock %}
+</div>
+    </div>
+    {% else %}
+    <div class="w-100">
+  {% block login_content %}{% endblock %}
+</div>
+    {% endif %}
+
+<script>
+  const formLogin = document.querySelector('form');
+  if (formLogin) {
+    formLogin.addEventListener('submit', function () {
+      const botao = formLogin.querySelector('button[type="submit"]');
+      if (botao) {
+        botao.disabled = true;
+        botao.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Entrando...';
+      }
+    });
+  }
+</script>
+</body>
+</html>

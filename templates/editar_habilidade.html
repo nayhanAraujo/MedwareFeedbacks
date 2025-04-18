@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+
+{% block title %}Editar Habilidade{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Editar Habilidade</h2>
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<form method="POST" class="row g-3" onsubmit="return validarAlteracoes();">
+  <div class="col-md-6">
+    <label class="form-label">Nome da Habilidade</label>
+    <input type="text" name="nome" class="form-control" value="{{ habilidade.nome }}" required>
+  </div>
+
+  <div class="col-md-6">
+    <label class="form-label">Categoria</label>
+    <select name="categoria_id" class="form-select" required>
+      <option value="">Selecione...</option>
+      {% for cat in categorias %}
+        <option value="{{ cat.id }}" {% if habilidade.categoria_id == cat.id %}selected{% endif %}>{{ cat.nome }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="col-12 mt-3">
+    <button type="submit" class="btn btn-success" id="btnSalvar">
+      <span id="btnText">Salvar Alterações</span>
+      <span id="btnSpinner" class="spinner-border spinner-border-sm d-none ms-2" role="status" aria-hidden="true"></span>
+    </button>
+    <a href="{{ url_for('gerenciar_habilidades') }}" class="btn btn-secondary ms-2">Cancelar</a>
+  </div>
+</form>
+
+<script>
+    // Função para validar alterações
+    function validarAlteracoes() {
+      const nomeOriginal = '{{ habilidade.nome }}'.trim();
+      const categoriaOriginal = '{{ habilidade.categoria_id }}';
+      const nomeAtual = document.querySelector('input[name="nome"]').value.trim();
+      const categoriaAtual = document.querySelector('select[name="categoria_id"]').value;
+      const btnSalvar = document.getElementById('btnSalvar');
+      const btnText = document.getElementById('btnText');
+      const btnSpinner = document.getElementById('btnSpinner');
+    
+      if (nomeAtual === nomeOriginal && categoriaAtual === categoriaOriginal) {
+        const modal = new bootstrap.Modal(document.getElementById('modalSemAlteracao'));
+        modal.show();
+        
+        // Reativar o botão imediatamente
+        resetarBotao();
+        return false;
+      }
+      
+      // Desativar o botão apenas se houver alterações
+      btnSalvar.disabled = true;
+      btnText.textContent = 'Salvando...';
+      btnSpinner.classList.remove('d-none');
+      return true;
+    }
+    
+    // Função para resetar o botão
+    function resetarBotao() {
+      const btnSalvar = document.getElementById('btnSalvar');
+      const btnText = document.getElementById('btnText');
+      const btnSpinner = document.getElementById('btnSpinner');
+      
+      btnSalvar.disabled = false;
+      btnText.textContent = 'Salvar Alterações';
+      btnSpinner.classList.add('d-none');
+    }
+    
+    // Monitorar mudanças nos campos para reativar o botão
+    document.addEventListener('DOMContentLoaded', function() {
+      const nomeInput = document.querySelector('input[name="nome"]');
+      const categoriaSelect = document.querySelector('select[name="categoria_id"]');
+      
+      nomeInput.addEventListener('input', resetarBotao);
+      categoriaSelect.addEventListener('change', resetarBotao);
+      
+      // Resetar botão quando o modal for fechado
+      document.getElementById('modalSemAlteracao').addEventListener('hidden.bs.modal', resetarBotao);
+    });
+    </script>
+<!-- Modal de aviso -->
+<div class="modal fade" id="modalSemAlteracao" tabindex="-1" aria-labelledby="modalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalLabel">Aviso</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        Nenhuma alteração detectada. Altere o nome ou a categoria antes de salvar.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+</script>
+{% endblock %}

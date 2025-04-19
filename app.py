@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, g, make_response,jsonify,json
+from flask import Flask, render_template, request, redirect, url_for, session, flash, g, make_response,jsonify,json,request
 from models import db, Usuario, Feedback, NotaPermitida, ConfiguracaoAvaliacao, Resposta, AcaoCorretiva, Avaliacao, AvaliacaoItem, Setor, Habilidades, CategoriaHabilidade
 from datetime import datetime,timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -10,11 +10,8 @@ import matplotlib
 matplotlib.use('Agg')  # Usar backend não interativo
 import matplotlib.pyplot as plt
 import seaborn as sns
-import os
-import base64
-import logging
-import secrets
-import urllib.parse
+import os,  base64,  logging,  secrets,  urllib.parse
+
 
 
 
@@ -938,10 +935,26 @@ def cadastrar_setor():
     return render_template('cadastrar_setor.html', usuario=g.usuario_logado)
 
 
+@app.route('/relatorio_avaliacoes/<int:usuario_id>', methods=['GET'])
+def relatorio_avaliacoes(usuario_id):
+    avaliacoes = Avaliacao.query.filter_by(usuario_id=usuario_id).all()
+    relatorio = []
+    for av in avaliacoes:
+        for item in av.itens:
+            response = requests.post(
+                "https://api.x.ai/v1/completions",
+                headers={"Authorization": f"Bearer {XAI_API_KEY}", "Content-Type": "application/json"},
+                json={"model": "grok-3", "prompt": f"Resuma: {item.comentario}", "max_tokens": 50}
+            )
+            resumo = response.json()['choices'][0]['text']
+            relatorio.append({"criterio": item.criterio, "nota": item.nota, "resumo": resumo})
+    return render_template('relatorio.html', relatorio=relatorio)
+
+
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()
-        app.run(debug=True)
+        #db.create_all()
+        #app.run(debug=True)
 
-    #app.run(host='192.168.10.34', port=8000, debug=True)
+        app.run(host='192.168.10.34', port=8000, debug=True)
 

@@ -6,14 +6,16 @@ from weasyprint import HTML
 from io import BytesIO
 from collections import defaultdict
 from flask_mail import Mail, Message
+from dotenv import load_dotenv
 import matplotlib
 matplotlib.use('Agg')  # Usar backend não interativo
 import matplotlib.pyplot as plt
 import seaborn as sns
-import os,  base64,  logging,  secrets,  urllib.parse
+import os,  base64,  logging,  secrets,  urllib.parse, requests
 
 
-
+# Carregar variáveis de ambiente
+load_dotenv()
 
 # Configurar logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -23,6 +25,11 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:masterkey@localhost:5432/feedbacks'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.secret_key = 'chave_secreta_super_segura'
+XAI_API_KEY = os.getenv('XAI_API_KEY')
+
+if not XAI_API_KEY:
+    raise ValueError("XAI_API_KEY não configurada no ambiente.")
+
 db.init_app(app)  # importante!
 
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'

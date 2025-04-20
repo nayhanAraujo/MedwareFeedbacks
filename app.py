@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, g, make_response,jsonify,json,request
-from models import db, Usuario, Feedback, NotaPermitida, ConfiguracaoAvaliacao, Resposta, AcaoCorretiva, Avaliacao, AvaliacaoItem, Setor, Habilidades, CategoriaHabilidade
+from models import db, Usuario, Feedback, NotaPermitida, AvaliacaoResumo, ConfiguracaoAvaliacao, Resposta, AcaoCorretiva, Avaliacao, AvaliacaoItem, Setor, Habilidades, CategoriaHabilidade
 from datetime import datetime,timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from weasyprint import HTML
@@ -11,7 +11,7 @@ import matplotlib
 matplotlib.use('Agg')  # Usar backend não interativo
 import matplotlib.pyplot as plt
 import seaborn as sns
-import os,  base64,  logging,  secrets,  urllib.parse, requests
+import os,  base64,  logging,  secrets,  urllib.parse, requests, redis
 
 
 # Carregar variáveis de ambiente
@@ -30,6 +30,10 @@ XAI_API_KEY = os.getenv('XAI_API_KEY')
 if not XAI_API_KEY:
     raise ValueError("XAI_API_KEY não configurada no ambiente.")
 
+
+# Configurar Redis
+redis_client = redis.Redis(host='localhost', port=6379, db=0)
+
 db.init_app(app)  # importante!
 
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
@@ -38,6 +42,16 @@ app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = 'nayhanbsb@gmail.com'
 app.config['MAIL_PASSWORD'] = 'txkt aiqx qqvk vjdr'
 mail = Mail(app)
+
+
+@app.before_request
+def carregar_usuario_logado():
+    g.usuario_logado = None
+    if 'usuario_id' in session:
+        g.usuario_logado = Usuario.query.get(session['usuario_id'])
+        logger.debug(f"Usuário logado: {g.usuario_logado.nome if g.usuario_logado else 'Nenhum'}")
+    else:
+        logger.debug("Nenhum usuário logado na sessão")
 
 # ROTA PARA GERENCIAR HABILIDADES
 @app.route('/habilidades', methods=['GET', 'POST'])
@@ -397,23 +411,34 @@ def carregar_usuario_logado():
 # ROTAS
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    if 'usuario_id' in session:
+        logger.debug("Usuário já logado, redirecionando para dashboard")
+        return redirect(url_for('dashboard_colaboradores'))
+
     if request.method == 'POST':
         email = request.form['email']
         senha = request.form['senha']
+        logger.debug(f"Tentativa de login com email: {email}")
         usuario = Usuario.query.filter_by(email=email).first()
 
         if usuario and usuario.verificar_senha(senha):
             session['usuario_id'] = usuario.id
             session['usuario_nome'] = usuario.nome
+            session.permanent = True  # Sessão persiste por 1 dia
+            logger.info(f"Login bem-sucedido para usuário ID {usuario.id}")
             flash('Login realizado com sucesso!', 'success')
             if usuario.is_admin:
                 return redirect(url_for('dashboard_colaboradores'))
             else:
                 return redirect(url_for('avaliar_funcionario'))
         else:
+            logger.warning("Falha no login: credenciais inválidas")
             flash('Credenciais inválidas.', 'danger')
 
+    logger.debug("Renderizando página de login")
     return render_template('login.html')
+
+
 
 
 @app.route('/bibliotecas')
@@ -686,60 +711,191 @@ def excluir_nota(id):
     flash('Nota excluída com sucesso!', 'success')
     return redirect(url_for('gerenciar_notas'))
 
-# ROTA DE AVALIAÇÃO
+
+
+# Função auxiliar para consultar ou chamar a API com Redis
+def get_sentiment_from_cache_or_api(observacoes):
+    if not observacoes or not observacoes.strip():
+        return "Não analisado"
+
+    # Usar hash das observações como chave para evitar problemas com caracteres especiais
+    import hashlib
+    cache_key = f"sentiment:{hashlib.md5(observacoes.encode()).hexdigest()}"
+    
+    # Verificar cache no Redis
+    cached = redis_client.get(cache_key)
+    if cached:
+        sentimento = cached.decode()
+        logger.debug(f"Sentimento encontrado no cache (Redis) para observações: {observacoes[:50]}... - {sentimento}")
+        return sentimento
+
+    # Se não estiver no cache, chamar a API
+    try:
+        logger.debug("Chamando xAI API para análise de sentimento")
+        response = requests.post(
+            "https://api.x.ai/v1/completions",
+            headers={
+                "Authorization": f"Bearer {XAI_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "grok-3-mini-beta",
+                "prompt": f"Analise o seguinte comentário e retorne apenas uma palavra: Positivo, Negativo ou Neutro.\nComentário: {observacoes}",
+                "max_tokens": 10,
+                "temperature": 0.2
+            }
+        )
+        response.raise_for_status()
+        
+        result = response.json()
+        sentimento = result['choices'][0]['text'].strip()
+        
+        valid_sentiments = ['Positivo', 'Negativo', 'Neutro']
+        if sentimento not in valid_sentiments:
+            logger.warning(f"Sentimento inválido retornado pela API: {sentimento}")
+            sentimento = "Neutro"
+
+        # Salvar no Redis com expiração de 30 dias
+        redis_client.setex(cache_key, 2592000, sentimento)  # 30 dias em segundos
+        logger.info(f"Sentimento salvo no cache (Redis): {sentimento}")
+
+        return sentimento
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Erro ao chamar xAI API: {str(e)}")
+        return "Não analisado"
+    except Exception as e:
+        logger.error(f"Erro inesperado ao processar análise de sentimento: {str(e)}")
+        return "Não analisado"
+
+
+# Função para gerar um resumo detalhado usando a API da xAI
+def get_detailed_evaluation_summary(avaliacao, itens):
+    observacoes = avaliacao.observacoes or ""
+    sentimento = avaliacao.sentimento or "Não analisado"
+
+    # Estruturar os dados das habilidades e notas
+    habilidades_info = "\n".join([
+        f"- {item.categoria} - {item.nome_habilidade}: {item.nota}/5"
+        for item in itens
+    ])
+
+    # Calcular a média geral das notas
+    media_geral = sum(item.nota for item in itens) / len(itens) if itens else 0
+
+    # Criar o prompt para a API
+    prompt = (
+        "Você é um assistente de RH que analisa avaliações de desempenho de colaboradores. "
+        "Com base nas informações fornecidas, gere um resumo detalhado e construtivo sobre o desempenho do colaborador. "
+        "Considere as notas das habilidades, a média geral, as observações e o sentimento das observações. "
+        "Divida o resumo em três seções: **Pontos Fortes**, **Áreas a Melhorar** e **Sugestões de Desenvolvimento**. "
+        "Use o formato:\n"
+        "**Pontos Fortes:**\n(texto)\n\n"
+        "**Áreas a Melhorar:**\n(texto)\n\n"
+        "**Sugestões de Desenvolvimento:**\n(texto)\n\n"
+        f"**Informações do Colaborador**:\n"
+        f"Nome: {avaliacao.funcionario.nome}\n"
+        f"Cargo: {avaliacao.funcionario.cargo}\n"
+        f"Setor: {avaliacao.funcionario.setor.nome if avaliacao.funcionario.setor else 'Sem setor'}\n\n"
+        f"**Média Geral**: {media_geral:.2f}/5\n\n"
+        f"**Habilidades Avaliadas**:\n{habilidades_info}\n\n"
+        f"**Observações**: {observacoes}\n\n"
+        f"**Sentimento das Observações**: {sentimento}\n"
+    )
+
+    try:
+        logger.debug("Chamando xAI API para gerar resumo detalhado da avaliação")
+        response = requests.post(
+            "https://api.x.ai/v1/completions",
+            headers={
+                "Authorization": f"Bearer {XAI_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "grok-3-mini-beta",
+                "prompt": prompt,
+                "max_tokens": 500,
+                "temperature": 0.7
+            }
+        )
+        response.raise_for_status()
+
+        result = response.json()
+        summary = result['choices'][0]['text'].strip()
+        logger.info(f"Resumo detalhado gerado para avaliação ID {avaliacao.id}")
+        return summary
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Erro ao chamar xAI API para resumo detalhado: {str(e)}")
+        return "Não foi possível gerar o resumo detalhado devido a um erro na API."
+    except Exception as e:
+        logger.error(f"Erro inesperado ao processar resumo detalhado: {str(e)}")
+        return "Não foi possível gerar o resumo detalhado devido a um erro inesperado."
+
 @app.route('/avaliar', methods=['GET', 'POST'])
 def avaliar_funcionario():
     if 'usuario_id' not in session:
+        logger.debug("Usuário não autenticado, redirecionando para login")
         return redirect(url_for('login'))
 
     usuario = g.usuario_logado
     setor_id = request.form.get('setor_filtro')
     
-    # Filtra funcionários
     if setor_id:
         funcionarios = Usuario.query.filter_by(setor_id=setor_id).filter(Usuario.is_admin == False).all()
     else:
         funcionarios = Usuario.query.filter(Usuario.is_admin == False).all()
 
-    # Categorias do setor do usuário
     categorias = CategoriaHabilidade.query.filter_by(setor_id=usuario.setor_id).order_by(CategoriaHabilidade.nome).all()
     
-    # Organizar habilidades por categoria
     habilidades_por_categoria = {}
     for cat in categorias:
         habilidades_por_categoria[cat.nome] = Habilidades.query.filter_by(categoria_id=cat.id, ativa=True).all()
 
     if request.method == 'POST' and request.form.get('funcionario'):
-        from datetime import datetime
         id_funcionario = request.form['funcionario']
         observacoes = request.form['observacoes']
 
-        avaliacao = Avaliacao(
-            id_funcionario=id_funcionario,
-            id_avaliador=session['usuario_id'],
-            observacoes=observacoes,
-            data_avaliacao=datetime.now()
-        )
-        db.session.add(avaliacao)
-        db.session.commit()
-        #notas_disponiveis = NotaPermitida.query.filter_by(setor_id=g.usuario_logado.setor_id).order_by(NotaPermitida.valor).all()
+        try:
+            avaliacao = Avaliacao(
+                id_funcionario=id_funcionario,
+                id_avaliador=session['usuario_id'],
+                observacoes=observacoes,
+                data_avaliacao=datetime.now()
+            )
+            db.session.add(avaliacao)
+            db.session.commit()
+            logger.debug(f"Avaliação criada com ID {avaliacao.id}")
 
-        for key, nota in request.form.items():
-            if key.startswith('cat_'):
-                habilidade_id = int(key.split('_')[1])
-                habilidade = Habilidades.query.get(habilidade_id)
-                if habilidade:
-                    item = AvaliacaoItem(
-                        id_avaliacao=avaliacao.id,
-                        nome_habilidade=habilidade.nome,
-                        categoria=habilidade.categoria.nome,
-                        nota=float(nota)
-                    )
-                    db.session.add(item)
+            for key, nota in request.form.items():
+                if key.startswith('cat_'):
+                    habilidade_id = int(key.split('_')[1])
+                    habilidade = Habilidades.query.get(habilidade_id)
+                    if habilidade:
+                        item = AvaliacaoItem(
+                            id_avaliacao=avaliacao.id,
+                            nome_habilidade=habilidade.nome,
+                            categoria=habilidade.categoria.nome,
+                            nota=float(nota)
+                        )
+                        db.session.add(item)
 
-        db.session.commit()
-        session['avaliacao_realizada'] = True
-        return redirect(url_for('avaliar_funcionario'))
+            db.session.commit()
+            logger.debug(f"Itens de avaliação salvos para avaliação ID {avaliacao.id}")
+
+            # Analisar sentimento usando cache
+            sentimento = get_sentiment_from_cache_or_api(observacoes)
+            avaliacao.sentimento = sentimento
+            db.session.commit()
+            logger.info(f"Sentimento salvo para avaliação ID {avaliacao.id}: {sentimento}")
+
+            session['avaliacao_realizada'] = True
+            flash('Avaliação registrada com sucesso!', 'success')
+            return redirect(url_for('avaliar_funcionario'))
+        
+        except Exception as e:
+            logger.error(f"Erro ao processar avaliação: {str(e)}")
+            db.session.rollback()
+            flash(f"Erro ao registrar avaliação: {str(e)}", 'danger')
+            return redirect(url_for('avaliar_funcionario'))
     
     notas_permitidas = NotaPermitida.query.filter_by(setor_id=g.usuario_logado.setor_id).order_by(NotaPermitida.valor).all()
     notas_disponiveis = [float(n.valor) for n in notas_permitidas]
@@ -752,6 +908,103 @@ def avaliar_funcionario():
         usuario=usuario,
         notas_disponiveis=notas_disponiveis
     )
+
+# Rota de análise de observação
+@app.route('/analisar_observacao/<int:avaliacao_id>', methods=['GET'])
+def analisar_observacao(avaliacao_id):
+    if 'usuario_id' not in session:
+        logger.debug("Usuário não autenticado, redirecionando para login")
+        return redirect(url_for('login'))
+    
+    logger.debug(f"Iniciando análise para avaliação ID {avaliacao_id}")
+    avaliacao = Avaliacao.query.get_or_404(avaliacao_id)
+
+    # Verificar permissões: apenas o avaliador ou administrador pode acessar
+    if avaliacao.id_avaliador != g.usuario_logado.id and not g.usuario_logado.is_admin:
+        flash('Acesso negado: Você não tem permissão para visualizar esta avaliação.', 'danger')
+        return redirect(url_for('dashboard_colaboradores'))
+
+    observacoes = avaliacao.observacoes or ""
+    
+    # Analisar sentimento se ainda não foi analisado
+    if not avaliacao.sentimento:
+        if not observacoes.strip():
+            flash('Observações vazias, não há nada para analisar.', 'warning')
+            avaliacao.sentimento = "Não analisado"
+        else:
+            sentimento = get_sentiment_from_cache_or_api(observacoes)
+            avaliacao.sentimento = sentimento
+            db.session.commit()
+            logger.info(f"Análise de sentimento para avaliação ID {avaliacao_id}: {sentimento}")
+    
+    # Buscar os itens da avaliação
+    itens = AvaliacaoItem.query.filter_by(id_avaliacao=avaliacao_id).all()
+
+    # Recuperar o resumo mais recente ou gerar um novo
+    ultimo_resumo = AvaliacaoResumo.query.filter_by(id_avaliacao=avaliacao_id).order_by(AvaliacaoResumo.data_criacao.desc()).first()
+    if not ultimo_resumo:  # Se não houver resumo, gere um novo
+        resumo = get_detailed_evaluation_summary(avaliacao, itens)
+        novo_resumo = AvaliacaoResumo(id_avaliacao=avaliacao_id, resumo=resumo)
+        db.session.add(novo_resumo)
+        db.session.commit()
+        logger.info(f"Novo resumo salvo para avaliação ID {avaliacao_id}")
+    else:
+        resumo = ultimo_resumo.resumo
+        logger.debug(f"Resumo recuperado do banco para avaliação ID {avaliacao_id}")
+
+    logger.debug("Renderizando template com detalhes da avaliação")
+    return render_template(
+        'analisar_observacao.html',
+        avaliacao=avaliacao,
+        itens=itens,
+        resumo=resumo,
+        usuario=g.usuario_logado
+    )
+
+@app.route('/analisar_observacao/<int:avaliacao_id>/regenerar_resumo', methods=['POST'])
+def regenerar_resumo(avaliacao_id):
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+    
+    avaliacao = Avaliacao.query.get_or_404(avaliacao_id)
+    if avaliacao.id_avaliador != g.usuario_logado.id and not g.usuario_logado.is_admin:
+        flash('Acesso negado.', 'danger')
+        return redirect(url_for('dashboard_colaboradores'))
+    
+    itens = AvaliacaoItem.query.filter_by(id_avaliacao=avaliacao_id).all()
+    resumo = get_detailed_evaluation_summary(avaliacao, itens)
+    novo_resumo = AvaliacaoResumo(id_avaliacao=avaliacao_id, resumo=resumo)
+    db.session.add(novo_resumo)
+    db.session.commit()
+    flash('Resumo regenerado e salvo com sucesso!', 'success')
+    logger.info(f"Novo resumo regenerado e salvo para avaliação ID {avaliacao_id}")
+    
+    return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id))
+
+
+@app.route('/analises_sentimentos', methods=['GET'])
+def analises_sentimentos():
+    if 'usuario_id' not in session:
+        logger.debug("Usuário não autenticado, redirecionando para login")
+        return redirect(url_for('login'))
+    
+    logger.debug("Carregando análises de sentimentos")
+    sentimento_filtro = request.args.get('sentimento')
+    query = Avaliacao.query.filter(Avaliacao.sentimento != None)
+    if sentimento_filtro in ['Positivo', 'Negativo', 'Neutro']:
+        query = query.filter(Avaliacao.sentimento == sentimento_filtro)
+    avaliacoes = query.order_by(Avaliacao.data_avaliacao.desc()).all()
+    
+    return render_template('analises_sentimentos.html', avaliacoes=avaliacoes)
+
+
+
+
+
+@app.route('/teste_template')
+def teste_template():
+    logger.debug("Testando renderização do template")
+    return render_template('analisar_observacao.html', avaliacao_id=0, observacoes="Teste", sentimento="Teste")
 
 #rota para excluir avaliação
 @app.route('/avaliacao/<int:id>/excluir', methods=['POST'])
@@ -850,44 +1103,46 @@ def alternar_status_habilidade(id):
     })
 
 
-@app.route('/')
+@app.route('/', methods=['GET'])
 def dashboard_colaboradores():
     if 'usuario_id' not in session:
+        logger.debug("Usuário não autenticado, redirecionando para login")
         return redirect(url_for('login'))
 
-    if not g.usuario_logado.is_admin:
-        flash('Acesso restrito a administradores.', 'danger')
-        return redirect(url_for('avaliar_funcionario'))
-
+    # Filtros
     setor_filtro = request.args.get('setor')
     nome_filtro = request.args.get('nome', '').strip()
     media_min = request.args.get('media_min', type=float)
     media_max = request.args.get('media_max', type=float)
 
-    # Consulta base - apenas usuários com avaliações e suas médias
+    # Consulta base - avaliações feitas pelo usuário logado
     query = db.session.query(
+        Avaliacao,
         Usuario,
-        db.func.count(Avaliacao.id).label('total_avaliacoes'),
+        Setor.nome.label('setor_nome'),
         db.func.avg(AvaliacaoItem.nota).label('media_geral')
     ).join(
-        Avaliacao, Usuario.id == Avaliacao.id_funcionario
+        Usuario, Avaliacao.id_funcionario == Usuario.id
     ).join(
-        AvaliacaoItem, AvaliacaoItem.id_avaliacao == Avaliacao.id
+        Setor, Usuario.setor_id == Setor.id, isouter=True
+    ).join(
+        AvaliacaoItem, AvaliacaoItem.id_avaliacao == Avaliacao.id, isouter=True
     ).filter(
-        Usuario.is_admin == False
+        Avaliacao.id_avaliador == g.usuario_logado.id
     ).group_by(
-        Usuario.id
+        Avaliacao.id, Usuario.id, Setor.nome
     )
 
+    # Aplicar filtros
     if setor_filtro:
-        query = query.join(Setor).filter(Setor.nome == setor_filtro)
+        query = query.filter(Setor.nome == setor_filtro)
     
     if nome_filtro:
         query = query.filter(Usuario.nome.ilike(f'%{nome_filtro}%'))
 
-    # Executa a consulta e processa os resultados
+    # Executar a consulta e processar os resultados
     dados = []
-    for usuario, total_avaliacoes, media_geral in query.all():
+    for avaliacao, usuario, setor_nome, media_geral in query.all():
         media_geral = round(float(media_geral), 2) if media_geral else 0
         
         # Aplicar filtros de média
@@ -896,27 +1151,33 @@ def dashboard_colaboradores():
             continue
         
         dados.append({
-            'id': usuario.id,
+            'id': avaliacao.id,
             'nome': usuario.nome,
             'cargo': usuario.cargo,
-            'setor': usuario.setor.nome if usuario.setor else 'Sem setor',
-            'total_avaliacoes': total_avaliacoes,
-            'media_geral': media_geral
+            'setor': setor_nome if setor_nome else 'Sem setor',
+            'media_geral': media_geral,
+            'observacoes': avaliacao.observacoes,
+            'sentimento': avaliacao.sentimento if avaliacao.sentimento else 'Não analisado',
+            'data_avaliacao': avaliacao.data_avaliacao
         })
 
-    # Ordenar por maior média
-    dados.sort(key=lambda x: x['media_geral'], reverse=True)
+    # Ordenar por data de avaliação (mais recente primeiro)
+    dados.sort(key=lambda x: x['data_avaliacao'], reverse=True)
 
-    # Estatísticas - agora baseadas apenas nos dados filtrados
-    total_colaboradores = len(dados)
-    media_geral_geral = round(sum(d['media_geral'] for d in dados) / total_colaboradores, 2) if dados else 0
+    # Estatísticas
+   # Na sua rota dashboard_colaboradores
+    total_avaliados = len({avaliacao.id_funcionario for avaliacao, _, _, _ in query.all()})
+    total_avaliacoes = len(dados)
+    media_geral_geral = round(sum(d['media_geral'] for d in dados) / total_avaliacoes, 2) if total_avaliacoes > 0 else 0
+
+    logger.debug(f"Total de avaliações do usuário {g.usuario_logado.nome}: {total_avaliacoes}")
 
     return render_template(
         'dashboard.html',
         dados=dados,
         setores=Setor.query.all(),
         setor_filtro=setor_filtro,
-        total_colaboradores=total_colaboradores,
+        total_colaboradores=total_avaliados,
         media_geral=media_geral_geral,
         usuario=g.usuario_logado
     )
@@ -942,26 +1203,11 @@ def cadastrar_setor():
     return render_template('cadastrar_setor.html', usuario=g.usuario_logado)
 
 
-@app.route('/relatorio_avaliacoes/<int:usuario_id>', methods=['GET'])
-def relatorio_avaliacoes(usuario_id):
-    avaliacoes = Avaliacao.query.filter_by(usuario_id=usuario_id).all()
-    relatorio = []
-    for av in avaliacoes:
-        for item in av.itens:
-            response = requests.post(
-                "https://api.x.ai/v1/completions",
-                headers={"Authorization": f"Bearer {XAI_API_KEY}", "Content-Type": "application/json"},
-                json={"model": "grok-3", "prompt": f"Resuma: {item.comentario}", "max_tokens": 50}
-            )
-            resumo = response.json()['choices'][0]['text']
-            relatorio.append({"criterio": item.criterio, "nota": item.nota, "resumo": resumo})
-    return render_template('relatorio.html', relatorio=relatorio)
+
 
 
 if __name__ == '__main__':
     with app.app_context():
-        #db.create_all()
-        #app.run(debug=True)
-
+        db.create_all()
         app.run(host='192.168.10.34', port=8000, debug=True)
 

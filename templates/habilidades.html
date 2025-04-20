@@ -40,38 +40,49 @@
 {% for categoria, habilidades in habilidades_por_categoria.items() %}
   <div class="card mb-4" id="categoria-{{ categoria.id }}">
     <div class="card-header bg-secondary text-white fw-bold d-flex justify-content-between align-items-center">
-      <span>{{ categoria.nome }}</span>
+      <div class="d-flex align-items-center">
+        <button class="btn btn-sm btn-outline-light me-2" 
+                data-bs-toggle="collapse" 
+                data-bs-target="#collapse-{{ categoria.id }}" 
+                aria-expanded="false" 
+                aria-controls="collapse-{{ categoria.id }}">
+          <i class="bi bi-chevron-down"></i>
+        </button>
+        <span>{{ categoria.nome }}</span>
+      </div>
       <button type="button" class="btn btn-sm btn-outline-danger" title="Excluir Categoria" data-bs-toggle="tooltip" data-bs-placement="top" onclick="confirmarExclusao('categoria', {{ categoria.id }}, '{{ categoria.nome | e }}')">
         <i class="bi bi-trash"></i>
       </button>
     </div>
-    <div class="card-body">
-      {% if habilidades %}
-        <ul class="list-group">
-          {% for h in habilidades %}
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-              <div>
-                <strong>{{ h.nome }}</strong>
-                <br>
-                <span class="badge bg-secondary">{{ 'Ativa' if h.ativa else 'Inativa' }}</span>
-              </div>
-              <div class="btn-group">
-                <a href="{{ url_for('editar_habilidade', id=h.id) }}" class="btn btn-sm btn-outline-primary" title="Editar">
-                  <i class="bi bi-pencil"></i>
-                </a>
-                <button type="button" class="btn btn-sm btn-outline-warning" title="Ativar/Inativar" onclick="toggleHabilidade({{ h.id }})">
-                  <i class="bi bi-eye{{ '' if h.ativa else '-slash' }}"></i>
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-danger" title="Excluir" onclick="confirmarExclusao('habilidade', {{ h.id }}, '{{ h.nome | e }}')">
-                  <i class="bi bi-trash"></i>
-                </button>
-              </div>
-            </li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <p class="text-muted mb-0">Nenhuma habilidade cadastrada nesta categoria. Use o formulário acima para adicionar uma habilidade.</p>
-      {% endif %}
+    <div class="collapse" id="collapse-{{ categoria.id }}">
+      <div class="card-body">
+        {% if habilidades %}
+          <ul class="list-group">
+            {% for h in habilidades %}
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                  <strong>{{ h.nome }}</strong>
+                  <br>
+                  <span class="badge bg-secondary">{{ 'Ativa' if h.ativa else 'Inativa' }}</span>
+                </div>
+                <div class="btn-group">
+                  <a href="{{ url_for('editar_habilidade', id=h.id) }}" class="btn btn-sm btn-outline-primary" title="Editar">
+                    <i class="bi bi-pencil"></i>
+                  </a>
+                  <button type="button" class="btn btn-sm btn-outline-warning" title="Ativar/Inativar" onclick="toggleHabilidade({{ h.id }})">
+                    <i class="bi bi-eye{{ '' if h.ativa else '-slash' }}"></i>
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-danger" title="Excluir" onclick="confirmarExclusao('habilidade', {{ h.id }}, '{{ h.nome | e }}')">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-muted mb-0">Nenhuma habilidade cadastrada nesta categoria. Use o formulário acima para adicionar uma habilidade.</p>
+        {% endif %}
+      </div>
     </div>
   </div>
 {% endfor %}
@@ -156,5 +167,22 @@ async function toggleHabilidade(id) {
     window.location.reload();
   }
 }
+
+// Adiciona evento para mudar o ícone quando o colapso é aberto/fechado
+document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(button => {
+  button.addEventListener('click', function() {
+    const target = this.getAttribute('data-bs-target');
+    const isExpanded = this.getAttribute('aria-expanded') === 'true';
+    const icon = this.querySelector('i');
+    
+    if (isExpanded) {
+      icon.classList.remove('bi-chevron-up');
+      icon.classList.add('bi-chevron-down');
+    } else {
+      icon.classList.remove('bi-chevron-down');
+      icon.classList.add('bi-chevron-up');
+    }
+  });
+});
 </script>
 {% endblock %}

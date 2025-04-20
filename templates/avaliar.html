@@ -51,6 +51,18 @@
     <div class="tab-pane fade {% if loop.first %}show active{% endif %}" id="categoria-{{ loop.index }}" role="tabpanel">
       <div class="card mb-4">
         <div class="card-header bg-light fw-bold">
+          <div class="form-check form-switch mt-2">
+            <input class="form-check-input auto-preencher" type="checkbox" id="autoPreencher{{ loop.index }}" data-categoria="{{ loop.index }}">
+            <label class="form-check-label" for="autoPreencher{{ loop.index }}">
+              Preencher automaticamente esta categoria com a nota:
+              <select class="form-select form-select-sm d-inline w-auto ms-2 nota-padrao" data-categoria="{{ loop.index }}">
+                <option value="">Selecione...</option>
+                {% for nota in notas_disponiveis %}
+                  <option value="{{ nota }}">{{ nota }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          </div>
           <i class="bi bi-tags me-2"></i> {{ categoria }}
         </div>
         <div class="card-body">
@@ -77,7 +89,7 @@
 
   <div class="mb-3 mt-4">
     <label for="observacoes" class="form-label">Observações Gerais</label>
-    <textarea name="observacoes" class="form-control" rows="4"></textarea>
+    <textarea name="observacoes" class="form-control" rows="4" required></textarea>
   </div>
 
 <!-- Modifique o botão para incluir um spinner -->
@@ -173,6 +185,39 @@
     // Inicializa o progresso
     atualizarProgresso();
   });
+
+
+  document.querySelectorAll('.auto-preencher').forEach((checkbox) => {
+  checkbox.addEventListener('change', function () {
+    const categoria = this.dataset.categoria;
+    const nota = document.querySelector(`.nota-padrao[data-categoria="${categoria}"]`).value;
+    const selects = document.querySelectorAll(`#categoria-${categoria} select.habilidade`);
+
+    if (this.checked && nota) {
+      selects.forEach(s => {
+        s.value = nota;
+        s.dispatchEvent(new Event('change'));
+      });
+    }
+  });
+});
+
+document.querySelectorAll('.nota-padrao').forEach((selectNota) => {
+  selectNota.addEventListener('change', function () {
+    const categoria = this.dataset.categoria;
+    const checkbox = document.querySelector(`.auto-preencher[data-categoria="${categoria}"]`);
+    const nota = this.value;
+    const selects = document.querySelectorAll(`#categoria-${categoria} select.habilidade`);
+
+    if (checkbox.checked && nota) {
+      selects.forEach(s => {
+        s.value = nota;
+        s.dispatchEvent(new Event('change'));
+      });
+    }
+  });
+});
+
 </script>
 
 {% endblock %}

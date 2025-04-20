@@ -52,7 +52,7 @@ class CategoriaHabilidade(db.Model):
 
 
 class Habilidades(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True,autoincrement=True)
     nome = db.Column(db.String(100), nullable=False)
     categoria_id = db.Column(db.Integer, db.ForeignKey('categoria_habilidade.id'))
     ativa = db.Column(db.Boolean, default=True)
@@ -85,15 +85,25 @@ class AcaoCorretiva(db.Model):
     status = db.Column(db.String(20), default='pendente')
 
 class Avaliacao(db.Model):
-    __tablename__ = 'avaliacao'  # Força o nome da tabela
-
+    __tablename__ = 'avaliacao'
     id = db.Column(db.Integer, primary_key=True)
     id_funcionario = db.Column(db.Integer, db.ForeignKey('usuario.id'))
     id_avaliador = db.Column(db.Integer, db.ForeignKey('usuario.id'))
     data_avaliacao = db.Column(db.DateTime, default=datetime.utcnow)
     observacoes = db.Column(db.Text)
+    sentimento = db.Column(db.Text)  # Nova coluna para sentimento
     itens = db.relationship('AvaliacaoItem', backref='avaliacao', cascade='all, delete-orphan')
+    funcionario = db.relationship('Usuario', foreign_keys=[id_funcionario])
+    avaliador = db.relationship('Usuario', foreign_keys=[id_avaliador])
+    resumos = db.relationship('AvaliacaoResumo', backref='avaliacao', cascade='all, delete-orphan')
 
+
+class AvaliacaoResumo(db.Model):
+    __tablename__ = 'avaliacao_resumo'
+    id = db.Column(db.Integer, primary_key=True)
+    id_avaliacao = db.Column(db.Integer, db.ForeignKey('avaliacao.id'), nullable=False)
+    resumo = db.Column(db.Text, nullable=False)
+    data_criacao = db.Column(db.DateTime, default=db.func.current_timestamp())
 
 class AvaliacaoItem(db.Model):
     __tablename__ = 'avaliacao_item'  # Força o nome da tabela
@@ -118,3 +128,5 @@ class Habilidade(db.Model):
 class Setor(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False, unique=True)
+
+

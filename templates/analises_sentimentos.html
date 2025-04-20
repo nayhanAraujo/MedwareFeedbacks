@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Análises de Sentimento</h2>
+        <form method="GET" class="ms-3">
+            <div class="input-group">
+                <select name="sentimento" class="form-select" onchange="this.form.submit()">
+                    <option value="">Todos os sentimentos</option>
+                    <option value="Positivo" {% if request.args.get('sentimento') == 'Positivo' %}selected{% endif %}>Positivo</option>
+                    <option value="Negativo" {% if request.args.get('sentimento') == 'Negativo' %}selected{% endif %}>Negativo</option>
+                    <option value="Neutro" {% if request.args.get('sentimento') == 'Neutro' %}selected{% endif %}>Neutro</option>
+                </select>
+                <button type="submit" class="btn btn-outline-secondary">
+                    <i class="bi bi-funnel"></i> Filtrar
+                </button>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Exibir mensagens flash -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {% if avaliacoes %}
+        <table id="analisesTable" class="table table-striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Observações</th>
+                    <th>Sentimento</th>
+                    <th>Data</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for avaliacao in avaliacoes %}
+                    <tr>
+                        <td>{{ avaliacao.id }}</td>
+                        <td>{{ avaliacao.observacoes | truncate(100, True) }}</td>
+                        <td>{{ avaliacao.sentimento }}</td>
+                        <td>{{ avaliacao.data_avaliacao.strftime('%d/%m/%Y %H:%M') }}</td>
+                        <td>
+                            <a href="{{ url_for('analisar_observacao', avaliacao_id=avaliacao.id) }}" class="btn btn-sm btn-primary">Ver Detalhes</a>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>Nenhuma análise de sentimento disponível.</p>
+    {% endif %}
+    
+    <a href="{{ url_for('avaliar_funcionario') }}" class="btn btn-secondary mt-3">Voltar</a>
+</div>
+
+<script>
+$(document).ready(function() {
+    $('#analisesTable').DataTable({
+        "language": {
+            "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json"
+        }
+    });
+});
+</script>
+{% endblock %}

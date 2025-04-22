@@ -15,8 +15,12 @@ class ConfiguracaoAvaliacao(db.Model):
 
 class NotaPermitida(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    valor = db.Column(db.Float, nullable=False, unique=True)  # Valores como 1.0, 1.5, 2.0, etc.
+    valor = db.Column(db.Numeric(4, 2), nullable=False)
     setor_id = db.Column(db.Integer, db.ForeignKey('setor.id'), nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('valor', 'setor_id', name='valor_por_setor_unique'),
+    )
 
     setor = db.relationship('Setor', backref='notas_permitidas')
 

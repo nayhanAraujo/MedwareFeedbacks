@@ -14,6 +14,7 @@ import seaborn as sns
 import os,  base64,  logging,  secrets,  urllib.parse, requests, redis
 
 
+
 # Carregar variáveis de ambiente
 load_dotenv()
 
@@ -36,12 +37,16 @@ redis_client = redis.Redis(host='localhost', port=6379, db=0)
 
 db.init_app(app)  # importante!
 
+
+
+
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = 'nayhanbsb@gmail.com'
 app.config['MAIL_PASSWORD'] = 'txkt aiqx qqvk vjdr'
 mail = Mail(app)
+
 
 
 @app.before_request
@@ -215,8 +220,6 @@ def cadastrar_usuario():
             db.session.add(novo)
             db.session.commit()
             flash('Usuário cadastrado com sucesso!', 'success')
-            return redirect(url_for('listar_usuarios'))
-
     return render_template('cadastrar_usuario.html', setores=setores, usuario=g.usuario_logado)
 
 
@@ -512,6 +515,8 @@ def exportar_relatorio_completo():
 
     # Resumo de habilidades apenas para avaliações filtradas
     resumo = defaultdict(lambda: {'total': 0, 'soma': 0, 'categoria': ''})
+    data_geracao = datetime.now().strftime('%d/%m/%Y %H:%M')
+    usuario = g.usuario_logado
     for av in avaliacoes:
         itens = AvaliacaoItem.query.filter_by(id_avaliacao=av.id).all()
         for item in itens:
@@ -553,7 +558,7 @@ def exportar_relatorio_completo():
             nomes = [d['nome'] for d in dados_dashboard]
             medias = [d['media_geral'] for d in dados_dashboard]
 
-            plt.figure(figsize=(10, max(6, len(nomes) * 0.4)))
+            plt.figure(figsize=(8, max(4, len(nomes) * 0.3)))
             ax = sns.barplot(x=medias, y=nomes, color='#0d6efd')
             plt.xlabel('Média Geral')
             plt.ylabel('Colaborador')
@@ -581,7 +586,7 @@ def exportar_relatorio_completo():
                 labels = ['1-2 Estrelas', '2.5-3.5 Estrelas', '4-5 Estrelas']
                 colors = ['#dc3545', '#ffc107', '#198754']
 
-                plt.figure(figsize=(6, 6))
+                plt.figure(figsize=(4, 4))
                 plt.pie(faixas, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
                 plt.tight_layout()
                 plt.savefig(pie_chart_path, format='png', dpi=150)
@@ -600,7 +605,7 @@ def exportar_relatorio_completo():
         logger.error(f"Erro ao gerar gráficos: {str(e)}")
         bar_chart_base64 = None
         pie_chart_base64 = None
-
+        
     # Renderizar PDF
     try:
         rendered = render_template('relatorio_completo_pdf.html',
@@ -612,7 +617,10 @@ def exportar_relatorio_completo():
                                   setor_filtro=setor_filtro,
                                   nome_filtro=nome_filtro,
                                   media_min=media_min,
-                                  media_max=media_max)
+                                  media_max=media_max,
+                                  data_geracao=data_geracao,
+                                  usuario=usuario)
+        
         pdf = HTML(string=rendered).write_pdf()
         logger.debug("PDF renderizado com sucesso")
     except Exception as e:
@@ -677,22 +685,31 @@ def gerenciar_notas():
     usuario = g.usuario_logado
     setor_id = usuario.setor_id
     setor = Setor.query.get(usuario.setor_id)
+    
     if request.method == 'POST':
         nova_nota = request.form.get('valor_nota')
+        
         if nova_nota:
             try:
                 valor = round(float(nova_nota), 2)
-                nova = NotaPermitida(valor=valor, setor_id=setor_id)
-                db.session.add(nova)
-                db.session.commit()
-                flash('Nota cadastrada com sucesso!', 'success')
+
+                # Verifica se a nota já existe para o setor
+                nota_existente = NotaPermitida.query.filter_by(setor_id=setor_id, valor=valor).first()
+                if nota_existente:
+                    flash('Esta nota já foi cadastrada para o seu setor.', 'warning')
+                else:
+                    nova = NotaPermitida(valor=valor, setor_id=setor_id)
+                    db.session.add(nova)
+                    db.session.commit()
+                    flash('Nota cadastrada com sucesso!', 'success')
             except ValueError:
                 flash('Valor inválido.', 'danger')
-        return redirect(url_for('gerenciar_notas'))
 
+            return redirect(url_for('gerenciar_notas'))
+
+    # Esta parte deve estar FORA do bloco POST, para ser executada em GET também
     notas = NotaPermitida.query.filter_by(setor_id=setor_id).order_by(NotaPermitida.valor).all()
-
-    return render_template('notas.html', notas=notas, usuario=usuario,setor=setor)
+    return render_template('notas.html', notas=notas, usuario=usuario, setor=setor)
 
 @app.route('/nota/<int:id>/excluir', methods=['POST'])
 def excluir_nota(id):
@@ -718,16 +735,17 @@ def get_sentiment_from_cache_or_api(observacoes):
     if not observacoes or not observacoes.strip():
         return "Não analisado"
 
-    # Usar hash das observações como chave para evitar problemas com caracteres especiais
-    import hashlib
-    cache_key = f"sentiment:{hashlib.md5(observacoes.encode()).hexdigest()}"
-    
     # Verificar cache no Redis
-    cached = redis_client.get(cache_key)
-    if cached:
-        sentimento = cached.decode()
-        logger.debug(f"Sentimento encontrado no cache (Redis) para observações: {observacoes[:50]}... - {sentimento}")
-        return sentimento
+    cache_key = f"sentiment:{observacoes}"
+    try:
+        sentimento = redis_client.get(cache_key)
+        if sentimento:
+            logger.debug(f"Sentimento encontrado no cache (Redis) para observações: {observacoes[:50]}... - {sentimento}")
+            return sentimento
+    except redis.RedisError as e:
+        logger.error(f"Erro ao acessar o Redis: {str(e)}")
+        # Fallback: chamar a API diretamente
+        pass
 
     # Se não estiver no cache, chamar a API
     try:
@@ -755,9 +773,12 @@ def get_sentiment_from_cache_or_api(observacoes):
             logger.warning(f"Sentimento inválido retornado pela API: {sentimento}")
             sentimento = "Neutro"
 
-        # Salvar no Redis com expiração de 30 dias
-        redis_client.setex(cache_key, 2592000, sentimento)  # 30 dias em segundos
-        logger.info(f"Sentimento salvo no cache (Redis): {sentimento}")
+        # Salvar no cache (Redis) com expiração de 24 horas
+        try:
+            redis_client.setex(cache_key, 86400, sentimento)
+            logger.info(f"Sentimento salvo no cache (Redis): {sentimento}")
+        except redis.RedisError as e:
+            logger.error(f"Erro ao salvar no Redis: {str(e)}")
 
         return sentimento
     except requests.exceptions.RequestException as e:
@@ -768,6 +789,7 @@ def get_sentiment_from_cache_or_api(observacoes):
         return "Não analisado"
 
 
+# Função para gerar um resumo detalhado usando a API da xAI
 # Função para gerar um resumo detalhado usando a API da xAI
 def get_detailed_evaluation_summary(avaliacao, itens):
     observacoes = avaliacao.observacoes or ""
@@ -782,16 +804,19 @@ def get_detailed_evaluation_summary(avaliacao, itens):
     # Calcular a média geral das notas
     media_geral = sum(item.nota for item in itens) / len(itens) if itens else 0
 
-    # Criar o prompt para a API
+    # Criar o prompt para a API com formatação explícita
     prompt = (
         "Você é um assistente de RH que analisa avaliações de desempenho de colaboradores. "
         "Com base nas informações fornecidas, gere um resumo detalhado e construtivo sobre o desempenho do colaborador. "
         "Considere as notas das habilidades, a média geral, as observações e o sentimento das observações. "
         "Divida o resumo em três seções: **Pontos Fortes**, **Áreas a Melhorar** e **Sugestões de Desenvolvimento**. "
-        "Use o formato:\n"
-        "**Pontos Fortes:**\n(texto)\n\n"
-        "**Áreas a Melhorar:**\n(texto)\n\n"
-        "**Sugestões de Desenvolvimento:**\n(texto)\n\n"
+        "Use o formato exato abaixo, com títulos em negrito e quebras de linha entre as seções:\n"
+        "**Pontos Fortes:**\n(texto da seção)\n\n"
+        "**Áreas a Melhorar:**\n(texto da seção)\n\n"
+        "**Sugestões de Desenvolvimento:**\n(texto da seção)\n\n"
+        "Escreva de forma clara, com parágrafos bem estruturados e linguagem profissional. "
+        "Evite adicionar informações que não estejam presentes nos dados fornecidos. "
+        "Se não houver informações suficientes para identificar áreas a melhorar, indique isso de forma profissional.\n\n"
         f"**Informações do Colaborador**:\n"
         f"Nome: {avaliacao.funcionario.nome}\n"
         f"Cargo: {avaliacao.funcionario.cargo}\n"
@@ -799,7 +824,8 @@ def get_detailed_evaluation_summary(avaliacao, itens):
         f"**Média Geral**: {media_geral:.2f}/5\n\n"
         f"**Habilidades Avaliadas**:\n{habilidades_info}\n\n"
         f"**Observações**: {observacoes}\n\n"
-        f"**Sentimento das Observações**: {sentimento}\n"
+        f"**Sentimento das Observações**: {sentimento}\n\n"
+        "Forneça um resumo de até 300 palavras."
     )
 
     try:
@@ -1036,6 +1062,8 @@ def listar_avaliacoes():
 
     setores = Setor.query.order_by(Setor.nome).all()
     setor_id = request.form.get('setor_filtro')
+
+
 
     if setor_id:
         funcionarios = Usuario.query.filter_by(setor_id=setor_id).filter(Usuario.is_admin == False).all()

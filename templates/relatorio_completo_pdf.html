@@ -3,7 +3,36 @@
 <head>
   <meta charset="UTF-8">
   <style>
-    body { font-family: Arial, sans-serif; font-size: 12px; line-height: 1.4; margin: 20px; }
+
+body {
+    margin: 5px 15px; /* Reduz a margem superior de 20px para 5px */
+    padding: 0;
+  }
+  
+  .header {
+    margin-top: -10px; /* Remove qualquer margem superior */
+    padding-top: 0; /* Remove padding superior */
+    border-bottom: 1px solid #ddd;
+    position:relative;
+    top:-5px;
+    padding-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start; /* Alinha itens no topo */
+  }
+  
+  .logo-image {
+    height: 80px; /* Ajuste conforme necessário */
+    margin-top: 0; /* Remove margem superior da logo */
+  }
+  
+  .report-info {
+    font-size: 15px;
+    color: #666;
+    text-align: right;
+    margin-top: 0; /* Remove margem superior */
+    padding-top: 0; /* Remove padding superior */
+  }
     h1, h2, h3 { color: #333; }
     .subtitulo { font-weight: bold; margin-top: 10px; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
@@ -12,13 +41,34 @@
     .item-avaliacao { margin-left: 20px; margin-bottom: 10px; }
     .section-divider { page-break-before: always; }
     .text-muted { color: #666; font-style: italic; }
-    .chart-container { margin: 20px 0; text-align: center; }
-    .chart-container img { max-width: 80%; height: auto; }
+    .chart-container {
+    display: flex;
+    justify-content: space-between; /* Distribui os gráficos horizontalmente */
+    margin: 20px 0;
+    width: 100%; /* Garante que o container ocupa toda a largura */
+  }
+  .chart {
+    flex: 1; /* Cada gráfico ocupa a mesma proporção do espaço */
+    text-align: center;
+  }
+  .chart img {
+    max-width: 100%; /* Garante que a imagem não extrapole o container */
+    height: auto;
+  }
   </style>
 </head>
 <body>
-  <h1>Relatório Completo de Avaliações</h1>
-  <p class="text-muted">
+  <!-- Cabeçalho com logo -->
+  <div class="header">
+    <img class="logo-image" src="{{ url_for('static', filename='img/logo.png', _external=True) }}" alt="MEDWARE Feedback">
+    
+    <div class="report-info">
+      Relatório Gerado em: {{ data_geracao }}<br>
+      Por: {{ usuario.nome if usuario else 'Sistema' }}
+    </div>
+  </div>
+
+  <h1 class="report-title">Relatório Completo de Avaliações</h1>  <p class="text-muted">
     Filtros aplicados:
     {% if setor_filtro %}Setor: {{ setor_filtro }}{% endif %}
     {% if nome_filtro %}, Nome: {{ nome_filtro }}{% endif %}
@@ -30,20 +80,22 @@
   <!-- Seção de Gráficos -->
   <h2>Visão Geral</h2>
   <div class="chart-container">
-    {% if bar_chart_base64 %}
-      <h3>Média por Colaborador</h3>
-      <img src="data:image/png;base64,{{ bar_chart_base64 }}" alt="Gráfico de Média por Colaborador">
-    {% else %}
-      <p class="text-muted">Nenhum dado disponível para o gráfico de média por colaborador.</p>
-    {% endif %}
-  </div>
-  <div class="chart-container">
-    {% if pie_chart_base64 %}
-      <h3>Distribuição de Médias</h3>
-      <img src="data:image/png;base64,{{ pie_chart_base64 }}" alt="Gráfico de Distribuição de Médias">
-    {% else %}
-      <p class="text-muted">Nenhum dado disponível para o gráfico de distribuição.</p>
-    {% endif %}
+    <div class="chart" style="flex: 1;">
+      {% if bar_chart_base64 %}
+        <h3>Média por Colaborador</h3>
+        <img src="data:image/png;base64,{{ bar_chart_base64 }}" alt="Gráfico de Média por Colaborador" style="max-width: 100%; height: auto;">
+      {% else %}
+        <p class="text-muted">Nenhum dado disponível para o gráfico de média por colaborador.</p>
+      {% endif %}
+    </div>
+    <div class="chart" style="flex: 1;">
+      {% if pie_chart_base64 %}
+        <h3>Distribuição de Médias</h3>
+        <img src="data:image/png;base64,{{ pie_chart_base64 }}" alt="Gráfico de Distribuição de Médias" style="max-width: 100%; height: auto;">
+      {% else %}
+        <p class="text-muted">Nenhum dado disponível para o gráfico de distribuição.</p>
+      {% endif %}
+    </div>
   </div>
 
   <div class="section-divider"></div>

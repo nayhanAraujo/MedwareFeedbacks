@@ -1,565 +1,223 @@
-{% extends "base.html" %}
-{% block title %}Avaliar Colaborador{% endblock %}
+{% extends 'base.html' %}
+
+{% block title %}Avaliar Funcionário{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-  <!-- Título e Barra de Ferramentas -->
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="mb-0 text-primary">Avaliação por Habilidade</h2>
-    <form id="filtroForm" class="d-flex gap-2 align-items-center">
-      <div>
-        <label for="usuario" class="form-label mb-1">Colaborador:</label>
-        <select name="usuario" id="usuario" class="form-select form-select-sm no-select2" style="width: 200px;" required>
-          <option value="">Selecione o colaborador...</option>
-          {% for u in usuarios %}
-            <option value="{{ u.id }}" {% if u.id|string == avaliado_id %}selected{% endif %}>{{ u.nome }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div>
-        <label for="etapa" class="form-label mb-1">Etapa:</label>
-        <select name="etapa" id="etapa" class="form-select form-select-sm no-select2" style="width: 200px;" required>
-          <option value="">Selecione a etapa...</option>
-          {% for carreira_nome, etapas_carreira in etapas|groupby('carreira.nome') %}
-            <optgroup label="{{ carreira_nome }}">
-              {% for e in etapas_carreira %}
-                <option value="{{ e.id }}" {% if e.id|string == etapa_id %}selected{% endif %}>{{ e.nome }}</option>
-              {% endfor %}
-            </optgroup>
-          {% endfor %}
-        </select>
-      </div>
-      {% if avaliado_id or etapa_id %}
-        <a href="{{ url_for('avaliacoes.avaliar') }}" class="btn btn-outline-secondary btn-sm">
-          <i class="bi bi-x-circle me-1"></i>Limpar
-        </a>
-      {% endif %}
-    </form>
-  </div>
 
-  <!-- Spinner de Carregamento -->
-  <div id="loadingSpinner" class="text-center" style="display: none;">
-    <div class="spinner-border text-primary" role="status">
-      <span class="visually-hidden">Carregando...</span>
+<h2 class="mb-4">Avaliar Funcionário</h2>
+
+<form method="POST" class="mb-4">
+
+  <div class="row mb-3">
+    <div class="col-md-6">
+      <label for="setor" class="form-label">Filtrar por Setor</label>
+      <select name="setor_filtro" class="form-select" onchange="this.form.submit()">
+        <option value="">Todos os setores</option>
+        {% for s in setores %}
+        <option value="{{ s.id }}" {% if request.form.get('setor_filtro') == s.id|string %}selected{% endif %}>{{ s.nome }}</option>
+        {% endfor %}
+      </select>
     </div>
   </div>
 
-  <!-- Mensagem quando não houver habilidades -->
-  <div id="mensagemSemHabilidades" class="alert alert-info" style="display: none;">
-    Nenhuma habilidade encontrada para a etapa selecionada.
-  </div>
-
-  <!-- Formulário de Avaliação -->
-  <form method="POST" id="avaliacaoForm">
-    <input type="hidden" name="usuario_id" id="usuario_id_hidden" value="{{ avaliado_id if avaliado_id else '' }}">
-    <div id="habilidadesContainer" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-      {% for h in habilidades %}
-        <div class="col mb-3">
-          <div class="card shadow-sm h-100 {% if notas_existentes[h.id]|default() %}bg-success-subtle{% endif %} {% if notas_existentes[h.id] is defined and notas_existentes[h.id]|float < 6 %}bg-danger-subtle{% endif %}">
-            <div class="card-body d-flex flex-column">
-              <h5 class="card-title" data-bs-toggle="tooltip" data-bs-placement="top" title="Insira uma nota de 0 a 10 para avaliar esta habilidade">
-                <i class="bi bi-award me-2"></i>{{ h.nome }}
-                {% if notas_existentes[h.id] is defined and notas_existentes[h.id]|float < 6 %}
-                  <i class="bi bi-exclamation-triangle-fill text-danger ms-2" title="Nota baixa!"></i>
-                {% endif %}
-                {% if notas_existentes[h.id]|default() %}
-                  <span class="badge bg-success ms-2">Avaliado</span>
-                {% endif %}
-              </h5>
-              <div class="mb-2 d-flex align-items-center">
-                <input type="number" step="0.01" min="0" max="10" name="habilidade_{{ h.id }}"
-                       id="habilidade_{{ h.id }}"
-                       class="form-control me-2"
-                       value="{{ notas_existentes[h.id]|default('') }}"
-                       required aria-describedby="notaAtual_{{ h.id }}">
-                <span class="badge nota-badge" id="notaAtual_{{ h.id }}">
-                  {% if notas_existentes[h.id] is defined and notas_existentes[h.id] != '' %}
-                    {{ notas_existentes[h.id] }}
-                  {% else %}-{% endif %}
-                </span>
-              </div>
-              <div class="star-rating mb-2" data-habilidade-id="{{ h.id }}">
-                {% for i in range(1, 11) %}
-                  <i class="bi bi-star{% if notas_existentes[h.id] is defined and notas_existentes[h.id]|float >= i %}-fill{% endif %}" data-value="{{ i }}"></i>
-                {% endfor %}
-              </div>
-              <!-- Campo para Comentários -->
-              <div class="mb-2">
-                <label for="comentario_{{ h.id }}" class="form-label small">Comentários (opcional):</label>
-                <textarea name="comentario_{{ h.id }}" id="comentario_{{ h.id }}" class="form-control form-control-sm" rows="2" placeholder="Digite suas observações...">{{ comentarios_existentes[h.id]|default('') }}</textarea>
-              </div>
-              <div class="invalid-feedback" id="notaError_{{ h.id }}">A nota deve estar entre 0 e 10.</div>
-            </div>
-          </div>
-        </div>
+  <div class="mb-4">
+    <label for="funcionario" class="form-label">Funcionário</label>
+    <select class="form-select" name="funcionario" required>
+      <option value="">Selecione...</option>
+      {% for f in funcionarios %}
+      <option value="{{ f.id }}">{{ f.nome }}</option>
       {% endfor %}
-    </div>
-
-    <!-- Média Dinâmica -->
-    <div id="mediaContainer" class="position-fixed bottom-0 end-0 m-4" style="z-index: 1000; display: none;">
-      <div class="card shadow-sm">
-        <div class="card-body">
-          <strong>Média atual:</strong> <span id="mediaAtual">--</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Botões de Ação -->
-    <div class="mt-4 text-end">
-      <button type="button" class="btn btn-outline-secondary me-2" id="limparNotas">Limpar Notas</button>
-      <button type="button" class="btn btn-success btn-lg" id="salvarAvaliacaoBtn" data-bs-toggle="modal" data-bs-target="#confirmarAvaliacaoModal" disabled>Salvar Avaliação</button>
-    </div>
-  </form>
-
-  <!-- Modal de Confirmação -->
-  <div class="modal fade" id="confirmarAvaliacaoModal" tabindex="-1" aria-labelledby="confirmarAvaliacaoLabel" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="confirmarAvaliacaoLabel">Confirmar Avaliação</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-        </div>
-        <div class="modal-body">
-          Tem certeza de que deseja salvar as avaliações? As notas e comentários inseridos serão registrados.
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-          <button type="button" class="btn btn-success" id="confirmarSalvar">Confirmar</button>
-        </div>
-      </div>
+    </select>
+  </div>
+  <div class="progress mb-4" style="height: 20px;">
+    <div id="progressBar" class="progress-bar bg-success" role="progressbar" style="width: 0%;">
+      <span id="progressText" class="fw-bold text-white">0%</span>
     </div>
   </div>
+<!-- Abas dinâmicas para categorias -->
+<ul class="nav nav-tabs mb-3" id="categoriaTabs" role="tablist">
+  {% for categoria, _ in habilidades_por_categoria.items() %}
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {% if loop.first %}active{% endif %}" id="tab-{{ loop.index }}" data-bs-toggle="tab" data-bs-target="#categoria-{{ loop.index }}" type="button" role="tab">
+        <i class="bi bi-tags me-1"></i> {{ categoria }}
+      </button>
+    </li>
+  {% endfor %}
+</ul>
 
-  <!-- Botão Voltar ao Topo -->
-  <button id="voltarTopo" class="btn btn-primary position-fixed bottom-0 end-0 m-4" style="z-index: 1000; display: none;">
-    <i class="bi bi-arrow-up"></i> Voltar ao Topo
-  </button>
-</div>
-{% endblock %}
-
-<!-- Estilos Personalizados -->
-{% block extra_css %}
-<style>
-  .nota-badge {
-    min-width: 40px;
-    text-align: center;
-  }
-  .nota-baixa { background-color: #dc3545; color: #fff; }
-  .nota-media { background-color: #ffc107; color: #212529; }
-  .nota-alta { background-color: #28a745; color: #fff; }
-  .star-rating {
-    display: flex;
-    gap: 5px;
-    font-size: 1.2rem;
-    cursor: pointer;
-  }
-  .star-rating .bi-star-fill {
-    color: #ffc107;
-  }
-  .star-rating .bi-star:hover,
-  .star-rating .bi-star-fill:hover {
-    color: #ffca2c;
-  }
-  /* Estilo para Selects */
-  .form-select {
-    transition: border-color 0.3s ease;
-  }
-  .form-select:focus,
-  .form-select:not([value=""]) {
-    border-color: #007bff;
-    box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
-  }
-  /* Estilo para Cards com Notas */
-  .bg-success-subtle {
-    background-color: #e6f4ea !important; /* Verde claro para cards avaliados */
-    transition: background-color 0.3s ease;
-  }
-  .bg-danger-subtle {
-    background-color: #f8d7da !important; /* Vermelho claro para notas baixas */
-    transition: background-color 0.3s ease;
-  }
-  /* Estilo para o Botão Voltar ao Topo */
-  #voltarTopo {
-    border-radius: 50%;
-    width: 50px;
-    height: 50px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-</style>
-{% endblock %}
-
-<!-- JavaScript para Funcionalidades Dinâmicas -->
-{% block extra_js %}
-{% raw %}
-<script>
-// Impedir que o Select2 seja aplicado aos selects desta página
-$(document).ready(function() {
-  $('select:not(.no-select2)').select2();
-  // Inicializar Tooltips
-  var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-  var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-    return new bootstrap.Tooltip(tooltipTriggerEl);
-  });
-});
-
-// Carregamento dinâmico com AJAX
-const usuarioSelect = document.getElementById('usuario');
-const etapaSelect = document.getElementById('etapa');
-const habilidadesContainer = document.getElementById('habilidadesContainer');
-const mensagemSemHabilidades = document.getElementById('mensagemSemHabilidades');
-const loadingSpinner = document.getElementById('loadingSpinner');
-const usuarioIdHidden = document.getElementById('usuario_id_hidden');
-const salvarAvaliacaoBtn = document.getElementById('salvarAvaliacaoBtn');
-
-function carregarHabilidades() {
-  console.log('carregarHabilidades chamado', usuarioSelect.value, etapaSelect.value);
-  const usuarioId = usuarioSelect.value;
-  const etapaId = etapaSelect.value;
-
-  if (!usuarioId || !etapaId) {
-    habilidadesContainer.innerHTML = '';
-    mensagemSemHabilidades.style.display = 'none';
-    loadingSpinner.style.display = 'none';
-    document.getElementById('mediaContainer').style.display = 'none';
-    usuarioIdHidden.value = '';
-    salvarAvaliacaoBtn.disabled = true;
-    return;
-  }
-
-  // Validar que usuarioId e etapaId são números
-  if (isNaN(usuarioId) || isNaN(etapaId)) {
-    console.error('usuarioId ou etapaId não são números:', usuarioId, etapaId);
-    mensagemSemHabilidades.textContent = 'Erro: Selecione um colaborador e uma etapa válidos.';
-    mensagemSemHabilidades.style.display = 'block';
-    salvarAvaliacaoBtn.disabled = true;
-    return;
-  }
-
-  // Atualizar o campo oculto com o usuario_id
-  usuarioIdHidden.value = usuarioId;
-  salvarAvaliacaoBtn.disabled = false;
-
-  // Mostrar spinner durante o carregamento
-  mensagemSemHabilidades.style.display = 'none';
-  loadingSpinner.style.display = 'block';
-
-  fetch(`/avaliacoes/habilidades?usuario_id=${usuarioId}&etapa_id=${etapaId}`, {
-    method: 'GET',
-    credentials: 'same-origin'
-  })
-    .then(response => {
-      console.log('Resposta do fetch:', response.status, response.statusText);
-      if (!response.ok) {
-        response.text().then(text => {
-          console.error('Corpo da resposta de erro:', text);
-        });
-        throw new Error(`Erro na requisição: ${response.status} ${response.statusText}`);
-      }
-      return response.json();
-    })
-    .then(data => {
-      console.log('Dados recebidos:', data);
-      habilidadesContainer.innerHTML = '';
-      if (data.habilidades.length === 0) {
-        mensagemSemHabilidades.style.display = 'block';
-        document.getElementById('mediaContainer').style.display = 'none';
-        loadingSpinner.style.display = 'none';
-        salvarAvaliacaoBtn.disabled = true;
-        return;
-      }
-
-      data.habilidades.forEach(h => {
-        const notaExistente = data.notas_existentes[h.id] || '';
-        const comentarioExistente = data.comentarios_existentes ? data.comentarios_existentes[h.id] || '' : '';
-        const badgeClass = notaExistente ? (notaExistente < 6 ? 'nota-baixa' : notaExistente <= 8 ? 'nota-media' : 'nota-alta') : '';
-        const cardClass = notaExistente ? (notaExistente < 6 ? 'bg-danger-subtle' : 'bg-success-subtle') : '';
-        let estrelasHtml = '';
-        for (let i = 1; i <= 10; i++) {
-          estrelasHtml += `<i class="bi bi-star${notaExistente >= i ? '-fill' : ''}" data-value="${i}"></i>`;
-        }
-
-        habilidadesContainer.innerHTML += `
-          <div class="col mb-3">
-            <div class="card shadow-sm h-100 ${cardClass}">
-              <div class="card-body d-flex flex-column">
-                <h5 class="card-title" data-bs-toggle="tooltip" data-bs-placement="top" title="Insira uma nota de 0 a 10 para avaliar esta habilidade">
-                  <i class="bi bi-award me-2"></i>${h.nome}
-                  ${notaExistente && notaExistente < 6 ? '<i class="bi bi-exclamation-triangle-fill text-danger ms-2" title="Nota baixa!"></i>' : ''}
-                  ${notaExistente ? '<span class="badge bg-success ms-2">Avaliado</span>' : ''}
-                </h5>
-                <div class="mb-2 d-flex align-items-center">
-                  <input type="number" step="0.01" min="0" max="10" name="habilidade_${h.id}"
-                         id="habilidade_${h.id}"
-                         class="form-control me-2"
-                         value="${notaExistente}"
-                         required aria-describedby="notaAtual_${h.id}">
-                  <span class="badge nota-badge ${badgeClass}" id="notaAtual_${h.id}">
-                    ${notaExistente || '-'}
-                  </span>
-                </div>
-                <div class="star-rating mb-2" data-habilidade-id="${h.id}">
-                  ${estrelasHtml}
-                </div>
-                <div class="mb-2">
-                  <label for="comentario_${h.id}" class="form-label small">Comentários (opcional):</label>
-                  <textarea name="comentario_${h.id}" id="comentario_${h.id}" class="form-control form-control-sm" rows="2" placeholder="Digite suas observações...">${comentarioExistente}</textarea>
-                </div>
-                <div class="invalid-feedback" id="notaError_${h.id}">A nota deve estar entre 0 e 10.</div>
-              </div>
-            </div>
+<!-- Conteúdo das abas -->
+<div class="tab-content">
+  {% for categoria, habilidades in habilidades_por_categoria.items() %}
+    <div class="tab-pane fade {% if loop.first %}show active{% endif %}" id="categoria-{{ loop.index }}" role="tabpanel">
+      <div class="card mb-4">
+        <div class="card-header bg-light fw-bold">
+          <div class="form-check form-switch mt-2">
+            <input class="form-check-input auto-preencher" type="checkbox" id="autoPreencher{{ loop.index }}" data-categoria="{{ loop.index }}">
+            <label class="form-check-label" for="autoPreencher{{ loop.index }}">
+              Preencher automaticamente esta categoria com a nota:
+              <select class="form-select form-select-sm d-inline w-auto ms-2 nota-padrao" data-categoria="{{ loop.index }}">
+                <option value="">Selecione...</option>
+                {% for nota in notas_disponiveis %}
+                  <option value="{{ nota }}">{{ nota }}</option>
+                {% endfor %}
+              </select>
+            </label>
           </div>
-        `;
+          <i class="bi bi-tags me-2"></i> {{ categoria }}
+        </div>
+        <div class="card-body">
+          <div class="row">
+            {% for h in habilidades %}
+            <div class="col-md-6 mb-3">
+              <label class="form-label">{{ h.nome }}</label>
+              <select name="cat_{{ h.id }}" class="form-select habilidade" required>
+                <option value="">Selecione...</option>
+                {% for nota in notas_disponiveis %}
+                <option value="{{ nota }}">{{ nota }}</option>
+              {% endfor %}
+              
+              </select>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+
+  <div class="mb-3 mt-4">
+    <label for="observacoes" class="form-label">Observações Gerais</label>
+    <textarea name="observacoes" class="form-control" rows="4" required></textarea>
+  </div>
+
+<!-- Modifique o botão para incluir um spinner -->
+<button type="submit" id="btnSalvar" class="btn btn-success">
+  <span id="btnText">Salvar Avaliação</span>
+  <span id="btnSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+</button>
+  <div id="alertaIncompleto" class="alert alert-warning mt-3 d-none" role="alert">
+    Por favor, preencha todas as habilidades antes de salvar a avaliação.
+  </div>
+</form>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const form = document.querySelector('form');
+    const alerta = document.getElementById('alertaIncompleto');
+    const selects = document.querySelectorAll('.habilidade');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const observacoes = document.querySelector('textarea[name="observacoes"]');
+    const btnSalvar = document.getElementById('btnSalvar');
+    const btnText = document.getElementById('btnText');
+    const btnSpinner = document.getElementById('btnSpinner');
+
+    function atualizarProgresso() {
+      let total = selects.length;
+      let preenchidos = 0;
+
+      selects.forEach(s => {
+        if (s.value !== '') preenchidos++;
       });
 
-      // Reaplicar eventos após recarregar os cards
-      configurarEventos();
-      atualizarMedia();
-      // Inicializar novos tooltips
-      var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-      var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-      });
-    })
-    .catch(error => {
-      console.error('Erro ao carregar habilidades:', error);
-      mensagemSemHabilidades.textContent = 'Erro ao carregar habilidades: ' + error.message + '. Verifique o console para mais detalhes.';
-      mensagemSemHabilidades.style.display = 'block';
-      salvarAvaliacaoBtn.disabled = true;
-    })
-    .finally(() => {
-      loadingSpinner.style.display = 'none';
-    });
-}
+      let percentual = Math.round((preenchidos / total) * 100);
+      progressBar.style.width = percentual + '%';
+      progressBar.setAttribute('aria-valuenow', percentual);
+      progressText.innerText = percentual + '%';
 
-usuarioSelect.addEventListener('change', carregarHabilidades);
-etapaSelect.addEventListener('change', carregarHabilidades);
-
-// Configurar eventos para estrelas e inputs
-function configurarEventos() {
-  // Estrelas
-  document.querySelectorAll('.star-rating').forEach(rating => {
-    const habilidadeId = rating.getAttribute('data-habilidade-id');
-    const input = document.getElementById(`habilidade_${habilidadeId}`);
-    const badge = document.getElementById(`notaAtual_${habilidadeId}`);
-
-    rating.querySelectorAll('.bi-star, .bi-star-fill').forEach(star => {
-      star.addEventListener('click', function() {
-        const value = this.getAttribute('data-value');
-        input.value = value;
-        badge.textContent = value;
-        atualizarClasseBadge(badge, value);
-        atualizarEstrelas(rating, value);
-        atualizarMedia();
-        // Atualizar destaque do card
-        const card = input.closest('.card');
-        if (value) {
-          card.classList.remove('bg-danger-subtle');
-          card.classList.add('bg-success-subtle');
-          if (value < 6) {
-            card.classList.add('bg-danger-subtle');
-            const icon = card.querySelector('.bi-exclamation-triangle-fill');
-            if (!icon) {
-              const title = card.querySelector('.card-title');
-              title.insertAdjacentHTML('beforeend', '<i class="bi bi-exclamation-triangle-fill text-danger ms-2" title="Nota baixa!"></i>');
-              new bootstrap.Tooltip(title.querySelector('.bi-exclamation-triangle-fill'));
-            }
-            // Remover badge "Avaliado" se já existir e recriá-lo
-            const badgeAvaliado = title.querySelector('.badge.bg-success');
-            if (badgeAvaliado) badgeAvaliado.remove();
-            title.insertAdjacentHTML('beforeend', '<span class="badge bg-success ms-2">Avaliado</span>');
-          } else {
-            card.classList.remove('bg-danger-subtle');
-            const icon = card.querySelector('.bi-exclamation-triangle-fill');
-            if (icon) icon.remove();
-            // Adicionar badge "Avaliado" se não existir
-            const badgeAvaliado = title.querySelector('.badge.bg-success');
-            if (!badgeAvaliado) {
-              const title = card.querySelector('.card-title');
-              title.insertAdjacentHTML('beforeend', '<span class="badge bg-success ms-2">Avaliado</span>');
-            }
-          }
-        } else {
-          card.classList.remove('bg-success-subtle', 'bg-danger-subtle');
-          const icon = card.querySelector('.bi-exclamation-triangle-fill');
-          if (icon) icon.remove();
-          const badgeAvaliado = card.querySelector('.badge.bg-success');
-          if (badgeAvaliado) badgeAvaliado.remove();
-        }
-      });
-    });
-  });
-
-  // Inputs de nota
-  document.querySelectorAll('input[name^="habilidade_"]').forEach(input => {
-    input.addEventListener('input', function() {
-      const habilidadeId = this.name.split('_')[1];
-      const badge = document.getElementById(`notaAtual_${habilidadeId}`);
-      const rating = document.querySelector(`.star-rating[data-habilidade-id="${habilidadeId}"]`);
-      const value = this.value;
-
-      if (value && (value < 0 || value > 10)) {
-        this.classList.add('is-invalid');
+      // Muda a cor conforme o progresso
+      if (percentual < 30) {
+        progressBar.className = 'progress-bar bg-danger';
+      } else if (percentual < 70) {
+        progressBar.className = 'progress-bar bg-warning';
       } else {
-        this.classList.remove('is-invalid');
+        progressBar.className = 'progress-bar bg-success';
       }
+    }
 
-      badge.textContent = value || '-';
-      atualizarClasseBadge(badge, value);
-      atualizarEstrelas(rating, value);
-      atualizarMedia();
-      // Atualizar destaque do card
-      const card = input.closest('.card');
-      const title = card.querySelector('.card-title');
-      if (value) {
-        card.classList.remove('bg-danger-subtle');
-        card.classList.add('bg-success-subtle');
-        if (value < 6) {
-          card.classList.add('bg-danger-subtle');
-          const icon = card.querySelector('.bi-exclamation-triangle-fill');
-          if (!icon) {
-            title.insertAdjacentHTML('beforeend', '<i class="bi bi-exclamation-triangle-fill text-danger ms-2" title="Nota baixa!"></i>');
-            new bootstrap.Tooltip(title.querySelector('.bi-exclamation-triangle-fill'));
-          }
-          // Remover e recriar badge "Avaliado"
-          const badgeAvaliado = title.querySelector('.badge.bg-success');
-          if (badgeAvaliado) badgeAvaliado.remove();
-          title.insertAdjacentHTML('beforeend', '<span class="badge bg-success ms-2">Avaliado</span>');
-        } else {
-          card.classList.remove('bg-danger-subtle');
-          const icon = card.querySelector('.bi-exclamation-triangle-fill');
-          if (icon) icon.remove();
-          const badgeAvaliado = title.querySelector('.badge.bg-success');
-          if (!badgeAvaliado) {
-            title.insertAdjacentHTML('beforeend', '<span class="badge bg-success ms-2">Avaliado</span>');
-          }
-        }
+    // Atualiza progresso quando qualquer select é alterado
+    selects.forEach(s => {
+      s.addEventListener('change', atualizarProgresso);
+    });
+
+    // Evento de submit do formulário
+    form.addEventListener('submit', function (e) {
+      // Mostrar loading
+      btnSalvar.disabled = true;
+      btnText.textContent = 'Salvando...';
+      btnSpinner.classList.remove('d-none');
+      
+      let total = selects.length;
+      let preenchidos = 0;
+      
+      selects.forEach(s => {
+        if (s.value !== '') preenchidos++;
+      });
+
+      const obsValor = observacoes.value.trim();
+      
+      if (preenchidos < total || !obsValor) {
+        e.preventDefault();
+        
+        // Restaurar botão
+        btnSalvar.disabled = false;
+        btnText.textContent = 'Salvar Avaliação';
+        btnSpinner.classList.add('d-none');
+        
+        alerta.classList.remove('d-none');
+        alerta.textContent = 'Por favor, preencha todas as habilidades e as observações antes de salvar a avaliação.';
+        alerta.scrollIntoView({ behavior: 'smooth' });
       } else {
-        card.classList.remove('bg-success-subtle', 'bg-danger-subtle');
-        const icon = card.querySelector('.bi-exclamation-triangle-fill');
-        if (icon) icon.remove();
-        const badgeAvaliado = card.querySelector('.badge.bg-success');
-        if (badgeAvaliado) badgeAvaliado.remove();
+        if (!confirm('Tem certeza que deseja salvar esta avaliação?')) {
+          e.preventDefault();
+          
+          // Restaurar botão
+          btnSalvar.disabled = false;
+          btnText.textContent = 'Salvar Avaliação';
+          btnSpinner.classList.add('d-none');
+        }
+        // Se confirmar, o formulário será submetido normalmente
       }
     });
+
+    // Inicializa o progresso
+    atualizarProgresso();
   });
-}
 
-// Atualizar classes do badge com base na nota
-function atualizarClasseBadge(badge, value) {
-  badge.classList.remove('nota-baixa', 'nota-media', 'nota-alta');
-  if (value) {
-    if (value < 6) badge.classList.add('nota-baixa');
-    else if (value <= 8) badge.classList.add('nota-media');
-    else badge.classList.add('nota-alta');
-  }
-}
 
-// Atualizar estrelas com base na nota
-function atualizarEstrelas(rating, value) {
-  rating.querySelectorAll('.bi-star, .bi-star-fill').forEach(star => {
-    const starValue = parseInt(star.getAttribute('data-value'));
-    if (value && starValue <= value) {
-      star.classList.remove('bi-star');
-      star.classList.add('bi-star-fill');
-    } else {
-      star.classList.remove('bi-star-fill');
-      star.classList.add('bi-star');
+  document.querySelectorAll('.auto-preencher').forEach((checkbox) => {
+  checkbox.addEventListener('change', function () {
+    const categoria = this.dataset.categoria;
+    const nota = document.querySelector(`.nota-padrao[data-categoria="${categoria}"]`).value;
+    const selects = document.querySelectorAll(`#categoria-${categoria} select.habilidade`);
+
+    if (this.checked && nota) {
+      selects.forEach(s => {
+        s.value = nota;
+        s.dispatchEvent(new Event('change'));
+      });
     }
   });
-}
-
-// Calcular e atualizar média dinamicamente
-function atualizarMedia() {
-  const inputs = document.querySelectorAll('input[name^="habilidade_"]');
-  let soma = 0;
-  let count = 0;
-
-  inputs.forEach(input => {
-    const value = parseFloat(input.value);
-    if (!isNaN(value) && input.value !== '') {
-      soma += value;
-      count++;
-    }
-  });
-
-  const mediaContainer = document.getElementById('mediaContainer');
-  const mediaAtual = document.getElementById('mediaAtual');
-  if (count > 0) {
-    mediaAtual.textContent = (soma / count).toFixed(2);
-    mediaContainer.style.display = 'block';
-  } else {
-    mediaAtual.textContent = '--';
-    mediaContainer.style.display = 'none';
-  }
-}
-
-// Limpar notas e comentários
-document.getElementById('limparNotas').addEventListener('click', function() {
-  document.querySelectorAll('input[name^="habilidade_"]').forEach(input => {
-    input.value = '';
-    input.classList.remove('is-invalid');
-    const habilidadeId = input.name.split('_')[1];
-    const badge = document.getElementById(`notaAtual_${habilidadeId}`);
-    const rating = document.querySelector(`.star-rating[data-habilidade-id="${habilidadeId}"]`);
-    const card = input.closest('.card');
-    const title = card.querySelector('.card-title');
-    badge.textContent = '-';
-    atualizarClasseBadge(badge, '');
-    atualizarEstrelas(rating, 0);
-    card.classList.remove('bg-success-subtle', 'bg-danger-subtle');
-    const icon = card.querySelector('.bi-exclamation-triangle-fill');
-    if (icon) icon.remove();
-    const badgeAvaliado = title.querySelector('.badge.bg-success');
-    if (badgeAvaliado) badgeAvaliado.remove();
-  });
-  // Limpar comentários
-  document.querySelectorAll('textarea[name^="comentario_"]').forEach(textarea => {
-    textarea.value = '';
-  });
-  atualizarMedia();
 });
 
-// Validação e envio do formulário
-document.getElementById('confirmarSalvar').addEventListener('click', function() {
-  const form = document.getElementById('avaliacaoForm');
-  let isValid = true;
+document.querySelectorAll('.nota-padrao').forEach((selectNota) => {
+  selectNota.addEventListener('change', function () {
+    const categoria = this.dataset.categoria;
+    const checkbox = document.querySelector(`.auto-preencher[data-categoria="${categoria}"]`);
+    const nota = this.value;
+    const selects = document.querySelectorAll(`#categoria-${categoria} select.habilidade`);
 
-  document.querySelectorAll('input[name^="habilidade_"]').forEach(input => {
-    const value = parseFloat(input.value);
-    if (input.value !== '' && (value < 0 || value > 10)) {
-      input.classList.add('is-invalid');
-      isValid = false;
-    } else {
-      input.classList.remove('is-invalid');
+    if (checkbox.checked && nota) {
+      selects.forEach(s => {
+        s.value = nota;
+        s.dispatchEvent(new Event('change'));
+      });
     }
   });
-
-  if (isValid) {
-    form.submit();
-  }
 });
 
-// Carregar habilidades iniciais se os filtros já estiverem selecionados
-document.addEventListener('DOMContentLoaded', function() {
-  console.log('DOM carregado, chamando carregarHabilidades');
-  carregarHabilidades();
-
-  // Mostrar/esconder botão Voltar ao Topo com base no scroll
-  const voltarTopoBtn = document.getElementById('voltarTopo');
-  window.addEventListener('scroll', function() {
-    if (window.scrollY > 300) {
-      voltarTopoBtn.style.display = 'flex';
-    } else {
-      voltarTopoBtn.style.display = 'none';
-    }
-  });
-
-  // Rolar suavemente para o topo
-  voltarTopoBtn.addEventListener('click', function() {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  });
-});
 </script>
-{% endraw %}
+
 {% endblock %}

@@ -82,11 +82,13 @@ class Resposta(db.Model):
 
 class AcaoCorretiva(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    id_feedback = db.Column(db.Integer, db.ForeignKey('feedback.id'))
+    id_avaliacao = db.Column(db.Integer, db.ForeignKey('avaliacao.id'), nullable=False) # Adicione nullable=False se uma ação corretiva DEVE ter uma avaliação
     descricao = db.Column(db.String(255))
     responsavel = db.Column(db.String(100))
     prazo = db.Column(db.DateTime)
     status = db.Column(db.String(20), default='pendente')
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow) # Esta linha
+
 
 class Avaliacao(db.Model):
     __tablename__ = 'avaliacao'
@@ -100,6 +102,8 @@ class Avaliacao(db.Model):
     funcionario = db.relationship('Usuario', foreign_keys=[id_funcionario])
     avaliador = db.relationship('Usuario', foreign_keys=[id_avaliador])
     resumos = db.relationship('AvaliacaoResumo', backref='avaliacao', cascade='all, delete-orphan')
+    acoes_corretivas = db.relationship('AcaoCorretiva', backref='avaliacao', cascade='all, delete-orphan')
+
 
 
 class AvaliacaoResumo(db.Model):
@@ -117,6 +121,9 @@ class AvaliacaoItem(db.Model):
     nome_habilidade = db.Column(db.String(100))
     categoria = db.Column(db.String(50))
     nota = db.Column(db.Float)
+    comentario = db.Column(db.Text, nullable=True) # Use Text para comentários mais longos, nullable=True para permitir comentários vazios
+
+
 
 
 class Habilidade(db.Model):

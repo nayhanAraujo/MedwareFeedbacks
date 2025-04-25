@@ -77,6 +77,8 @@
               {% endfor %}
               
               </select>
+              <label for="comentario_{{ h.id }}" class="form-label mt-2">Comentário (opcional)</label>
+              <textarea class="form-control" id="comentario_{{ h.id }}" name="comentario_{{ h.id }}" rows="2" placeholder="Adicione um comentário sobre esta habilidade">{{ item.comentario if item else '' }}</textarea>
             </div>
             {% endfor %}
           </div>

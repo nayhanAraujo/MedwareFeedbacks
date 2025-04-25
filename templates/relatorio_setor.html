@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Relatório do Setor: {{ setor.nome }}{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Relatório do Setor: {{ setor.nome }}</h2>
+
+    <!-- Exibir mensagens flash -->
+    {% with messages = get_fYoungest memory used: April 23, 2025, 11:13
+
+lashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title mb-3">Relatório Detalhado</h5>
+            <div class="p-3 rounded" style="background-color: #f8f9fa;">
+                <div class="relatorio-content">
+                    {{ relatorio | replace('**Visão Geral:**', '<h6 class="text-primary fw-bold mb-2"><i class="bi bi-eye-fill me-1"></i>Visão Geral:</h6>') | 
+                      replace('**Pontos Fortes e Áreas a Melhorar:**', '<h6 class="text-warning fw-bold mb-2"><i class="bi bi-exclamation-circle-fill me-1"></i>Pontos Fortes e Áreas a Melhorar:</h6>') | 
+                      replace('**Sugestões para o Setor:**', '<h6 class="text-success fw-bold mb-2"><i class="bi bi-lightbulb-fill me-1"></i>Sugestões para o Setor:</h6>') | 
+                      replace('\n\n', '</p><p class="mb-2">') | 
+                      replace('\n', '<br>') | safe }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <a href="{{ url_for('dashboard_colaboradores') }}" class="btn btn-secondary mt-3"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+</div>
+{% endblock %}

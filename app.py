@@ -11,7 +11,9 @@ import matplotlib
 matplotlib.use('Agg')  # Usar backend não interativo
 import matplotlib.pyplot as plt
 import seaborn as sns
-import os,  base64,  logging,  secrets,  urllib.parse, requests, redis
+import os,  base64,  logging,  secrets,  urllib.parse, requests, redis,re
+
+
 
 
 
@@ -23,6 +25,20 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+
+
+@app.template_filter('extract_summary_sections')
+def extract_summary_sections(text):
+    pattern = re.compile(
+        r"\*\*Pontos Fortes:\*\*.*?\n-\n\*\*Áreas a Melhorar:\*\*.*?\n-\n\*\*Sugestões de Desenvolvimento:\*\*.*?(?=\n*$)",
+        re.DOTALL
+    )
+    match = pattern.search(text)
+    return match.group(0).strip() if match else text
+
+
+# Habilitar a extensão 'do' no Jinja2
+app.jinja_env.add_extension('jinja2.ext.do')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:masterkey@localhost:5432/feedbacks'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.secret_key = 'chave_secreta_super_segura'
@@ -46,7 +62,6 @@ app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = 'nayhanbsb@gmail.com'
 app.config['MAIL_PASSWORD'] = 'txkt aiqx qqvk vjdr'
 mail = Mail(app)
-
 
 
 @app.before_request
@@ -646,6 +661,259 @@ def exportar_relatorio_completo():
 
 # ... (outras rotas mantidas inalteradas)
 
+@app.route('/relatorio_setor/<int:setor_id>', methods=['GET'])
+def relatorio_setor(setor_id):
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+    
+    if not g.usuario_logado.is_admin:
+        flash('Acesso negado: Apenas administradores podem gerar relatórios de setor.', 'danger')
+        return redirect(url_for('dashboard_colaboradores'))
+    
+    setor = Setor.query.get_or_404(setor_id)
+    colaboradores = Usuario.query.filter_by(setor_id=setor_id).all()
+    avaliacoes = Avaliacao.query.join(Usuario).filter(Usuario.setor_id == setor_id).all()
+
+    if not avaliacoes:
+        flash('Nenhuma avaliação encontrada para este setor.', 'warning')
+        return redirect(url_for('dashboard_colaboradores'))
+
+    # Calcular métricas
+    media_geral_setor = 0
+    sentimentos = {'Positivo': 0, 'Negativo': 0, 'Neutro': 0}
+    total_avaliacoes = len(avaliacoes)
+    habilidades_notas = defaultdict(list)
+
+    for avaliacao in avaliacoes:
+        itens = AvaliacaoItem.query.filter_by(id_avaliacao=avaliacao.id).all()
+        media = sum(item.nota for item in itens) / len(itens) if itens else 0
+        media_geral_setor += media
+        sentimento = avaliacao.sentimento or 'Neutro'
+        sentimentos[sentimento] += 1
+        for item in itens:
+            habilidade_key = f"{item.categoria} - {item.nome_habilidade}"
+            habilidades_notas[habilidade_key].append(item.nota)
+
+    media_geral_setor = media_geral_setor / total_avaliacoes if total_avaliacoes else 0
+    sentimentos_info = "\n".join([f"- {sentimento}: {count} avaliações" for sentimento, count in sentimentos.items()])
+    habilidades_info = "\n".join([
+        f"- {habilidade}: Média {sum(notas)/len(notas):.2f}/5"
+        for habilidade, notas in habilidades_notas.items()
+    ])
+
+    prompt = (
+        "Você é um assistente de RH especializado em análise de desempenho de equipes. "
+        "Com base nas informações fornecidas, gere um relatório detalhado sobre o desempenho do setor. "
+        "Divida o relatório em três seções: **Visão Geral**, **Pontos Fortes e Áreas a Melhorar**, e **Sugestões para o Setor**. "
+        "Use o formato abaixo:\n"
+        "**Visão Geral:**\n(texto da seção)\n\n"
+        "**Pontos Fortes e Áreas a Melhorar:**\n(texto da seção)\n\n"
+        "**Sugestões para o Setor:**\n(texto da seção)\n\n"
+        "Forneça um relatório de até 400 palavras, com linguagem profissional e insights práticos.\n\n"
+        f"**Informações do Setor**:\n"
+        f"Nome do Setor: {setor.nome}\n"
+        f"Total de Colaboradores: {len(colaboradores)}\n"
+        f"Total de Avaliações: {total_avaliacoes}\n"
+        f"Média Geral do Setor: {media_geral_setor:.2f}/5\n\n"
+        f"**Sentimentos das Avaliações**:\n{sentimentos_info}\n\n"
+        f"**Média das Habilidades**:\n{habilidades_info}\n\n"
+    )
+
+    try:
+        response = requests.post(
+            "https://api.x.ai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {XAI_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "grok-3-mini-beta",
+                "prompt": prompt,
+                "max_tokens": 1000,
+                "temperature": 0.7
+            }
+        )
+        response.raise_for_status()
+
+        result = response.json()
+        relatorio = result['choices'][0]['text'].strip()
+        logger.info(f"Relatório gerado para o setor ID {setor_id}")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Erro ao chamar xAI API para relatório de setor: {str(e)}")
+        relatorio = "Erro ao gerar o relatório."
+    except Exception as e:
+        logger.error(f"Erro inesperado ao processar relatório de setor: {str(e)}")
+        relatorio = "Erro inesperado ao gerar o relatório."
+
+    return render_template(
+        'relatorio_setor.html',
+        setor=setor,
+        relatorio=relatorio,
+        usuario=g.usuario_logado
+    )
+
+
+
+@app.route('/analisar_comentarios_habilidades/<int:avaliacao_id>', methods=['POST'])
+def analisar_comentarios_habilidades(avaliacao_id):
+    if 'usuario_id' not in session:
+        logger.debug("Usuário não autenticado, redirecionando para login")
+        return redirect(url_for('login'))
+
+    avaliacao = Avaliacao.query.get_or_404(avaliacao_id)
+    if avaliacao.id_avaliador != g.usuario_logado.id and not g.usuario_logado.is_admin:
+        flash('Acesso negado: Você não tem permissão para analisar comentários.', 'danger')
+        return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id))
+
+    itens = AvaliacaoItem.query.filter_by(id_avaliacao=avaliacao_id).all()
+    comentarios = [item.comentario for item in itens if item.comentario]
+
+    if not comentarios:
+        flash('Nenhum comentário disponível para análise.', 'warning')
+        return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id) + '#analise-comentarios')
+
+    # Usar a API para analisar o sentimento dos comentários
+    prompt = (
+        "Você é um assistente de RH que analisa comentários de avaliações de desempenho. "
+        "Com base nos comentários fornecidos, determine o sentimento geral (Positivo, Negativo ou Neutro) e forneça uma breve explicação (máximo de 2 frases). "
+        "Formato:\n"
+        "Sentimento: [Positivo/Negativo/Neutro]\n"
+        "Explicação: [sua explicação]\n\n"
+        f"Comentários:\n{'\n'.join([f'- {c}' for c in comentarios])}\n"
+    )
+
+    try:
+        response = requests.post(
+            "https://api.x.ai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {XAI_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "grok-3-mini-beta",
+                "prompt": prompt,
+                "max_tokens": 150,
+                "temperature": 0.7
+            }
+        )
+        response.raise_for_status()
+        result = response.json()
+        analise = result['choices'][0]['text'].strip()
+        session['analise_comentarios'] = analise
+    except Exception as e:
+        logger.error(f"Erro ao analisar comentários: {str(e)}")
+        session['analise_comentarios'] = "Erro ao analisar comentários. Tente novamente."
+
+    return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id) + '#analise-comentarios')
+
+from flask import session, redirect, url_for, flash, g
+from datetime import datetime
+import requests
+import logging
+
+logger = logging.getLogger(__name__)
+
+@app.route('/gerar_perguntas_feedback/<int:avaliacao_id>', methods=['POST'])
+def gerar_perguntas_feedback(avaliacao_id):
+    if 'usuario_id' not in session:
+        logger.debug("Usuário não autenticado, redirecionando para login")
+        return redirect(url_for('login'))
+
+    avaliacao = Avaliacao.query.get_or_404(avaliacao_id)
+    if avaliacao.id_avaliador != g.usuario_logado.id and not g.usuario_logado.is_admin:
+        flash('Acesso negado: Você não tem permissão para gerar perguntas de feedback.', 'danger')
+        return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id))
+
+    itens = AvaliacaoItem.query.filter_by(id_avaliacao=avaliacao_id).all()
+    habilidades_baixas = [f"{item.categoria} - {item.nome_habilidade} ({item.nota}/5)" for item in itens if item.nota < 2.5]
+
+    # Montar o prompt para a API
+    system_prompt = (
+        "Você é um assistente de RH especializado em gerar perguntas de feedback para reuniões de follow-up. "
+        "Sua tarefa é criar 3 perguntas abertas, específicas e úteis para discutir com o colaborador, focando nas habilidades com notas baixas (menores que 2.5). "
+        "As perguntas devem ser no formato:\n"
+        "- Pergunta 1\n"
+        "- Pergunta 2\n"
+        "- Pergunta 3\n\n"
+        "Não repita as informações fornecidas, apenas gere as perguntas com base nelas."
+    )
+    user_prompt = (
+        f"**Informações do Colaborador**:\n"
+        f"Nome: {avaliacao.funcionario.nome}\n"
+        f"Cargo: {avaliacao.funcionario.cargo}\n"
+        f"Setor: {avaliacao.funcionario.setor.nome if avaliacao.funcionario.setor else 'Sem setor'}\n"
+        f"Habilidades com Notas Baixas: {', '.join(habilidades_baixas) if habilidades_baixas else 'Nenhuma habilidade com nota baixa.'}\n"
+    )
+
+    try:
+        # Fazer a requisição para o endpoint correto
+        response = requests.post(
+            "https://api.x.ai/v1/chat/completions",  # Endpoint corrigido
+            headers={
+                "Authorization": f"Bearer {XAI_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "grok-3-mini-beta",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "max_tokens": 500,
+                "temperature": 0.7
+            }
+        )
+        response.raise_for_status()  # Levanta uma exceção para códigos de status 4xx/5xx
+        result = response.json()
+        
+        # Extrair as perguntas da resposta
+        perguntas_raw = result['choices'][0]['message']['content'].strip()
+        logger.debug(f"Perguntas brutas retornadas pela API: {perguntas_raw}")
+
+        # Limpar e formatar as perguntas
+        perguntas_lista = []
+        for linha in perguntas_raw.split('\n'):
+            linha = linha.strip()
+            if linha.startswith('- '):
+                pergunta = linha[2:].strip()
+                if pergunta and not pergunta.startswith("Habilidades com Notas Baixas"):
+                    perguntas_lista.append(pergunta)
+            elif linha and not linha.startswith('Gerado em:') and not linha.startswith("Habilidades com Notas Baixas"):
+                perguntas_lista.append(linha)
+
+        # Validar perguntas
+        perguntas_validas = [
+            p for p in perguntas_lista
+            if any(p.lower().startswith(palavra) for palavra in ["como ", "quais ", "por que ", "o que ", "você "]) and len(p) > 10
+        ]
+
+        if not perguntas_validas:
+            logger.warning(f"Nenhuma pergunta válida foi gerada pela API. Resposta bruta: {perguntas_raw}")
+            perguntas_lista = ["Nenhuma pergunta válida gerada. A API não retornou perguntas no formato esperado."]
+        else:
+            perguntas_lista = perguntas_validas
+
+        # Adicionar timestamp e formatar
+        timestamp = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        perguntas_formatadas = f"Gerado em: {timestamp}\n\n" + '\n'.join(perguntas_lista)
+        session['perguntas_feedback'] = perguntas_formatadas
+        logger.debug(f"Perguntas formatadas salvas na sessão: {perguntas_formatadas}")
+
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"Erro HTTP ao chamar a API: {str(e)}")
+        logger.debug(f"Resposta da API: {e.response.text if e.response else 'Sem resposta'}")
+        timestamp = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        perguntas_formatadas = f"Gerado em: {timestamp}\n\nErro ao gerar perguntas de feedback: {str(e)}"
+        session['perguntas_feedback'] = perguntas_formatadas
+    except Exception as e:
+        logger.error(f"Erro inesperado ao gerar perguntas de feedback: {str(e)}")
+        timestamp = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        perguntas_formatadas = f"Gerado em: {timestamp}\n\nErro ao gerar perguntas de feedback: {str(e)}"
+        session['perguntas_feedback'] = perguntas_formatadas
+
+    return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id) + '#perguntas-feedback')
+
+
 @app.route('/logout')
 def logout():
     session.clear()
@@ -729,7 +997,50 @@ def excluir_nota(id):
     return redirect(url_for('gerenciar_notas'))
 
 
-
+@app.route('/analises_sentimentos', methods=['GET'])
+def analises_sentimentos():
+    if 'usuario_id' not in session:
+        logger.debug("Usuário não autenticado, redirecionando para login")
+        return redirect(url_for('login'))
+    
+    logger.debug("Carregando análises de sentimentos")
+    sentimento_filtro = request.args.get('sentimento')
+    data_inicio = request.args.get('data_inicio')
+    data_fim = request.args.get('data_fim')
+    
+    query = Avaliacao.query.filter(Avaliacao.sentimento != None)
+    
+    # Filtro por sentimento
+    if sentimento_filtro in ['Positivo', 'Negativo', 'Neutro']:
+        logger.debug(f"Filtro aplicado: sentimento = {sentimento_filtro}")
+        query = query.filter(Avaliacao.sentimento == sentimento_filtro)
+    
+    # Filtro por data
+    try:
+        if data_inicio:
+            data_inicio_dt = datetime.strptime(data_inicio, '%Y-%m-%d')
+            query = query.filter(Avaliacao.data_avaliacao >= data_inicio_dt)
+            logger.debug(f"Filtro aplicado: data_inicio = {data_inicio}")
+        if data_fim:
+            data_fim_dt = datetime.strptime(data_fim, '%Y-%m-%d')
+            # Incluir o dia inteiro até 23:59:59
+            data_fim_dt = data_fim_dt.replace(hour=23, minute=59, second=59)
+            query = query.filter(Avaliacao.data_avaliacao <= data_fim_dt)
+            logger.debug(f"Filtro aplicado: data_fim = {data_fim}")
+    except ValueError as e:
+        logger.error(f"Erro ao converter datas: {str(e)}")
+        flash('Formato de data inválido. Use o formato AAAA-MM-DD.', 'danger')
+    
+    avaliacoes = query.order_by(Avaliacao.data_avaliacao.desc()).all()
+    logger.debug(f"Total de avaliações carregadas: {len(avaliacoes)}")
+    
+    return render_template(
+        'analises_sentimentos.html',
+        avaliacoes=avaliacoes,
+        sentimento_filtro=sentimento_filtro,
+        data_inicio=data_inicio,
+        data_fim=data_fim
+    )
 # Função auxiliar para consultar ou chamar a API com Redis
 def get_sentiment_from_cache_or_api(observacoes):
     if not observacoes or not observacoes.strip():
@@ -751,7 +1062,7 @@ def get_sentiment_from_cache_or_api(observacoes):
     try:
         logger.debug("Chamando xAI API para análise de sentimento")
         response = requests.post(
-            "https://api.x.ai/v1/completions",
+            "https://api.x.ai/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {XAI_API_KEY}",
                 "Content-Type": "application/json"
@@ -789,11 +1100,45 @@ def get_sentiment_from_cache_or_api(observacoes):
         return "Não analisado"
 
 
-# Função para gerar um resumo detalhado usando a API da xAI
-# Função para gerar um resumo detalhado usando a API da xAI
-def get_detailed_evaluation_summary(avaliacao, itens):
+
+
+def get_detailed_evaluation_summary(avaliacao, itens, force_refresh=False):
     observacoes = avaliacao.observacoes or ""
+    
+    # Reavaliar o sentimento com base nas notas para maior consistência
+    media_geral = sum(item.nota for item in itens) / len(itens) if itens else 0
     sentimento = avaliacao.sentimento or "Não analisado"
+    if media_geral >= 4.0 and "Negativo" not in sentimento:
+        sentimento = "Positivo"
+    elif media_geral <= 2.5 and "Positivo" not in sentimento:
+        sentimento = "Negativo"
+    elif media_geral > 2.5 and media_geral < 4.0:
+        sentimento = "Neutro"
+
+    # Verificar cache no Redis
+    cache_key = f"resumo:{avaliacao.id}:{sentimento}:{media_geral:.2f}"
+    if not force_refresh:
+        try:
+            cached_summary = redis_client.get(cache_key)
+            if cached_summary:
+                logger.debug(f"Resumo encontrado no cache (Redis) para avaliação ID {avaliacao.id}")
+                return cached_summary.decode('utf-8') if isinstance(cached_summary, bytes) else cached_summary
+        except Exception as e:
+            logger.warning(f"Erro ao acessar o cache Redis: {str(e)}. Prosseguindo sem cache.")
+
+    # Se não há itens ou observações, retornar uma resposta padrão
+    if not itens and not observacoes:
+        summary = (
+            "**Pontos Fortes:**\nNenhuma informação disponível para avaliar pontos fortes.\n-\n"
+            "**Áreas a Melhorar:**\nNenhuma informação disponível para identificar áreas a melhorar.\n-\n"
+            "**Sugestões de Desenvolvimento:**\nNenhuma sugestão disponível devido à falta de dados.\n"
+        )
+        try:
+            redis_client.setex(cache_key, timedelta(days=7), summary)
+            logger.info(f"Resumo padrão salvo no cache para avaliação ID {avaliacao.id}")
+        except Exception as e:
+            logger.warning(f"Erro ao salvar resumo padrão no cache: {str(e)}")
+        return summary
 
     # Estruturar os dados das habilidades e notas
     habilidades_info = "\n".join([
@@ -801,60 +1146,133 @@ def get_detailed_evaluation_summary(avaliacao, itens):
         for item in itens
     ])
 
-    # Calcular a média geral das notas
-    media_geral = sum(item.nota for item in itens) / len(itens) if itens else 0
+    # Identificar habilidades com notas baixas e medianas
+    habilidades_baixas = [f"{item.categoria} - {item.nome_habilidade} ({item.nota}/5)" for item in itens if item.nota < 2.5]
+    habilidades_medias = [f"{item.categoria} - {item.nome_habilidade} ({item.nota}/5)" for item in itens if 2.5 <= item.nota < 4.0]
 
-    # Criar o prompt para a API com formatação explícita
-    prompt = (
+    # Criar o prompt para a API
+    system_prompt = (
         "Você é um assistente de RH que analisa avaliações de desempenho de colaboradores. "
         "Com base nas informações fornecidas, gere um resumo detalhado e construtivo sobre o desempenho do colaborador. "
         "Considere as notas das habilidades, a média geral, as observações e o sentimento das observações. "
         "Divida o resumo em três seções: **Pontos Fortes**, **Áreas a Melhorar** e **Sugestões de Desenvolvimento**. "
         "Use o formato exato abaixo, com títulos em negrito e quebras de linha entre as seções:\n"
-        "**Pontos Fortes:**\n(texto da seção)\n\n"
-        "**Áreas a Melhorar:**\n(texto da seção)\n\n"
-        "**Sugestões de Desenvolvimento:**\n(texto da seção)\n\n"
+        "**Pontos Fortes:**\n(texto da seção)\n- Em seguida, uma quebra de linha.\n-\n"
+        "**Áreas a Melhorar:**\n(texto da seção)\n- Em seguida, uma quebra de linha.\n-\n"
+        "**Sugestões de Desenvolvimento:**\n(texto da seção)\n"
         "Escreva de forma clara, com parágrafos bem estruturados e linguagem profissional. "
         "Evite adicionar informações que não estejam presentes nos dados fornecidos. "
-        "Se não houver informações suficientes para identificar áreas a melhorar, indique isso de forma profissional.\n\n"
+        "Certifique-se de completar todas as frases e ideias, evitando cortar o texto no meio de uma frase. "
+        "Dedique atenção especial à seção **Sugestões de Desenvolvimento**, garantindo que ela tenha pelo menos 2 frases completas e seja específica. "
+        "Se as observações forem genéricas ou insuficientes, baseie as sugestões nas notas das habilidades e no sentimento. "
+        "Por exemplo, sugira treinamentos ou ações específicas para melhorar as habilidades com notas baixas ou medianas. "
+        "Forneça um resumo de até 300 palavras, distribuindo o espaço de forma equilibrada entre as três seções. "
+        "Não inclua introduções, explicações ou análises preliminares; comece diretamente com **Pontos Fortes:**."
+    )
+    user_prompt = (
         f"**Informações do Colaborador**:\n"
         f"Nome: {avaliacao.funcionario.nome}\n"
         f"Cargo: {avaliacao.funcionario.cargo}\n"
         f"Setor: {avaliacao.funcionario.setor.nome if avaliacao.funcionario.setor else 'Sem setor'}\n\n"
         f"**Média Geral**: {media_geral:.2f}/5\n\n"
         f"**Habilidades Avaliadas**:\n{habilidades_info}\n\n"
+        f"**Habilidades com Notas Baixas (menor que 2.5)**:\n{', '.join(habilidades_baixas) if habilidades_baixas else 'Nenhuma habilidade com nota baixa.'}\n\n"
+        f"**Habilidades com Notas Medianas (entre 2.5 e 4.0)**:\n{', '.join(habilidades_medias) if habilidades_medias else 'Nenhuma habilidade com nota mediana.'}\n\n"
         f"**Observações**: {observacoes}\n\n"
-        f"**Sentimento das Observações**: {sentimento}\n\n"
-        "Forneça um resumo de até 300 palavras."
+        f"**Sentimento das Observações**: {sentimento}\n"
     )
 
     try:
         logger.debug("Chamando xAI API para gerar resumo detalhado da avaliação")
         response = requests.post(
-            "https://api.x.ai/v1/completions",
+            "https://api.x.ai/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {XAI_API_KEY}",
                 "Content-Type": "application/json"
             },
             json={
                 "model": "grok-3-mini-beta",
-                "prompt": prompt,
-                "max_tokens": 500,
-                "temperature": 0.7
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "max_tokens": 800,
+                "temperature": 0.7,
+                "timeout": 10
             }
         )
         response.raise_for_status()
 
         result = response.json()
-        summary = result['choices'][0]['text'].strip()
-        logger.info(f"Resumo detalhado gerado para avaliação ID {avaliacao.id}")
+        raw_summary = result['choices'][0]['message']['content'].strip()
+
+        # Extrair apenas o resumo formatado usando regex
+        pattern = re.compile(
+            r"\*\*Pontos Fortes:\*\*.*?\n-\n\*\*Áreas a Melhorar:\*\*.*?\n-\n\*\*Sugestões de Desenvolvimento:\*\*.*?(?=\n*$)",
+            re.DOTALL
+        )
+        match = pattern.search(raw_summary)
+        if match:
+            summary = match.group(0).strip()
+            # Verificar se há texto antes de **Pontos Fortes:**
+            if raw_summary[:match.start()].strip():
+                logger.warning(f"Texto indesejado encontrado antes de **Pontos Fortes:**: {raw_summary[:match.start()].strip()}")
+        else:
+            logger.warning(f"Resumo não contém o formato esperado: {raw_summary}")
+            summary = (
+                "**Pontos Fortes:**\nResumo incompleto devido a resposta inválida da API.\n-\n"
+                "**Áreas a Melhorar:**\nResumo incompleto devido a resposta inválida da API.\n-\n"
+                "**Sugestões de Desenvolvimento:**\nNenhuma sugestão gerada devido a erro na resposta.\n"
+            )
+
+        # Validar o formato do resumo
+        required_sections = ["**Pontos Fortes:**", "**Áreas a Melhorar:**", "**Sugestões de Desenvolvimento:**"]
+        if not all(section in summary for section in required_sections):
+            logger.warning(f"Resumo fora do formato esperado após regex: {summary}")
+            summary = (
+                "**Pontos Fortes:**\nResumo incompleto devido a resposta inválida da API.\n-\n"
+                "**Áreas a Melhorar:**\nResumo incompleto devido a resposta inválida da API.\n-\n"
+                "**Sugestões de Desenvolvimento:**\nNenhuma sugestão gerada devido a erro na resposta.\n"
+            )
+
+        # Estimar número de palavras para validar limite de 300 palavras
+        word_count = len(summary.split())
+        if word_count > 350:
+            logger.warning(f"Resumo excede limite de palavras: {word_count} palavras")
+            summary = summary[:1000] + "\n(Resumo truncado para ajustar ao limite de tamanho)"
+
+        # Salvar no cache (Redis) com expiração de 7 dias
+        try:
+            redis_client.setex(cache_key, timedelta(days=7), summary)
+            logger.info(f"Resumo detalhado gerado e salvo no cache para avaliação ID {avaliacao.id}")
+        except Exception as e:
+            logger.warning(f"Erro ao salvar resumo no cache: {str(e)}")
+
         return summary
+
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"Erro HTTP ao chamar xAI API: {str(e)}")
+        logger.debug(f"Resposta da API: {e.response.text if e.response else 'Sem resposta'}")
+        return (
+            "**Pontos Fortes:**\nNão foi possível gerar o resumo devido a um erro na API.\n-\n"
+            "**Áreas a Melhorar:**\nNão foi possível gerar o resumo devido a um erro na API.\n-\n"
+            "**Sugestões de Desenvolvimento:**\nNenhuma sugestão disponível devido a erro na API.\n"
+        )
     except requests.exceptions.RequestException as e:
-        logger.error(f"Erro ao chamar xAI API para resumo detalhado: {str(e)}")
-        return "Não foi possível gerar o resumo detalhado devido a um erro na API."
+        logger.error(f"Erro de rede ao chamar xAI API: {str(e)}")
+        return (
+            "**Pontos Fortes:**\nNão foi possível gerar o resumo devido a um erro de rede.\n-\n"
+            "**Áreas a Melhorar:**\nNão foi possível gerar o resumo devido a um erro de rede.\n-\n"
+            "**Sugestões de Desenvolvimento:**\nNenhuma sugestão disponível devido a erro de rede.\n"
+        )
     except Exception as e:
         logger.error(f"Erro inesperado ao processar resumo detalhado: {str(e)}")
-        return "Não foi possível gerar o resumo detalhado devido a um erro inesperado."
+        return (
+            "**Pontos Fortes:**\nNão foi possível gerar o resumo devido a um erro inesperado.\n-\n"
+            "**Áreas a Melhorar:**\nNão foi possível gerar o resumo devido a um erro inesperado.\n-\n"
+            "**Sugestões de Desenvolvimento:**\nNenhuma sugestão disponível devido a erro inesperado.\n"
+        )
+
 
 @app.route('/avaliar', methods=['GET', 'POST'])
 def avaliar_funcionario():
@@ -896,13 +1314,19 @@ def avaliar_funcionario():
                     habilidade_id = int(key.split('_')[1])
                     habilidade = Habilidades.query.get(habilidade_id)
                     if habilidade:
+                        # Capturar o comentário correspondente
+                        comentario_key = f'comentario_{habilidade_id}'
+                        comentario = request.form.get(comentario_key, '').strip()
+                        
                         item = AvaliacaoItem(
                             id_avaliacao=avaliacao.id,
                             nome_habilidade=habilidade.nome,
                             categoria=habilidade.categoria.nome,
-                            nota=float(nota)
+                            nota=float(nota),
+                            comentario=comentario if comentario else None  # Salvar o comentário
                         )
                         db.session.add(item)
+                        logger.debug(f"Item salvo: Habilidade {habilidade.nome}, Nota {nota}, Comentário {comentario}")
 
             db.session.commit()
             logger.debug(f"Itens de avaliação salvos para avaliação ID {avaliacao.id}")
@@ -935,6 +1359,105 @@ def avaliar_funcionario():
         notas_disponiveis=notas_disponiveis
     )
 
+
+def get_corrective_actions(avaliacao, itens):
+    # Estruturar os dados das habilidades com notas baixas
+    habilidades_baixas = [f"{item.categoria} - {item.nome_habilidade} ({item.nota}/5)" for item in itens if item.nota < 2.5]
+    media_geral = sum(item.nota for item in itens) / len(itens) if itens else 0
+
+    # Verificar cache no Redis
+    cache_key = f"acoes_corretivas:{avaliacao.id}:{media_geral:.2f}"
+    try:
+        cached_actions = redis_client.get(cache_key)
+        if cached_actions:
+            logger.debug(f"Ações corretivas encontradas no cache (Redis) para avaliação ID {avaliacao.id}")
+            return cached_actions.decode('utf-8') if isinstance(cached_actions, bytes) else cached_actions
+    except Exception as e:
+        logger.warning(f"Erro ao acessar o cache Redis: {str(e)}. Prosseguindo sem cache.")
+
+    # Se não há habilidades com notas baixas, retornar uma resposta padrão
+    if not habilidades_baixas:
+        actions = "- Nenhuma ação corretiva necessária, pois não há habilidades com notas baixas."
+        try:
+            redis_client.setex(cache_key, timedelta(days=7), actions)
+            logger.info(f"Resposta padrão salva no cache para avaliação ID {avaliacao.id}")
+        except Exception as e:
+            logger.warning(f"Erro ao salvar resposta padrão no cache: {str(e)}")
+        return actions
+
+    # Criar o prompt para a API
+    system_prompt = (
+        "Você é um assistente de RH que sugere ações corretivas para melhorar o desempenho de colaboradores. "
+        "Com base nas informações fornecidas, gere exatamente 3 ações corretivas práticas e específicas para o colaborador. "
+        "Considere o cargo, o setor e as habilidades com notas baixas (menores que 2.5). "
+        "As ações devem ser claras, profissionais e no formato:\n"
+        "- Ação 1\n"
+        "- Ação 2\n"
+        "- Ação 3\n"
+        "Evite ações genéricas e foque em soluções práticas. Não retorne respostas vazias ou fora do formato."
+    )
+    user_prompt = (
+        f"**Informações do Colaborador**:\n"
+        f"Nome: {avaliacao.funcionario.nome}\n"
+        f"Cargo: {avaliacao.funcionario.cargo}\n"
+        f"Setor: {avaliacao.funcionario.setor.nome if avaliacao.funcionario.setor else 'Sem setor'}\n"
+        f"Habilidades com Notas Baixas: {', '.join(habilidades_baixas)}\n"
+        f"Média Geral: {media_geral:.2f}/5"
+    )
+
+    try:
+        logger.debug("Chamando xAI API para gerar ações corretivas")
+        response = requests.post(
+            "https://api.x.ai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {XAI_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "grok-3-mini-beta",  # Alterado para o modelo que funcionou anteriormente
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "max_tokens": 300,
+                "temperature": 0.7,
+                "timeout": 10  # Adicionado timeout para evitar chamadas pendentes
+            }
+        )
+        response.raise_for_status()
+
+        result = response.json()
+        actions = result['choices'][0]['message']['content'].strip()
+
+        # Validar o formato das ações
+        actions_list = [line.strip() for line in actions.split('\n') if line.strip().startswith('- ')]
+        if len(actions_list) != 3 or not all(line.startswith('- ') for line in actions_list):
+            logger.warning(f"Resposta da API fora do formato esperado: {actions}")
+            actions = "- Nenhuma ação corretiva válida gerada. A API não retornou ações no formato esperado."
+        else:
+            actions = '\n'.join(actions_list)
+
+        # Salvar no cache (Redis) com expiração de 7 dias
+        try:
+            redis_client.setex(cache_key, timedelta(days=7), actions)
+            logger.info(f"Ações corretivas geradas e salvas no cache para avaliação ID {avaliacao.id}")
+        except Exception as e:
+            logger.warning(f"Erro ao salvar ações no cache: {str(e)}")
+
+        return actions
+
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"Erro HTTP ao chamar xAI API: {str(e)}")
+        logger.debug(f"Resposta da API: {e.response.text if e.response else 'Sem resposta'}")
+        return "- Não foi possível gerar ações corretivas devido a um erro na API."
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Erro de rede ao chamar xAI API: {str(e)}")
+        return "- Não foi possível gerar ações corretivas devido a um erro de rede."
+    except Exception as e:
+        logger.error(f"Erro inesperado ao processar ações corretivas: {str(e)}")
+        return "- Não foi possível gerar ações corretivas devido a um erro inesperado."
+
+
 # Rota de análise de observação
 @app.route('/analisar_observacao/<int:avaliacao_id>', methods=['GET'])
 def analisar_observacao(avaliacao_id):
@@ -966,17 +1489,52 @@ def analisar_observacao(avaliacao_id):
     # Buscar os itens da avaliação
     itens = AvaliacaoItem.query.filter_by(id_avaliacao=avaliacao_id).all()
 
-    # Recuperar o resumo mais recente ou gerar um novo
+    # Calcular a média geral
+    media_geral = sum(item.nota for item in itens) / len(itens) if itens else 0
+
+    # Calcular as cores para o gráfico
+    background_colors = []
+    border_colors = []
+    for item in itens:
+        if item.nota >= 4:
+            background_colors.append('rgba(40, 167, 69, 0.7)')  # Verde
+            border_colors.append('rgba(40, 167, 69, 1)')
+        elif item.nota >= 2.5:
+            background_colors.append('rgba(255, 193, 7, 0.7)')  # Amarelo
+            border_colors.append('rgba(255, 193, 7, 1)')
+        else:
+            background_colors.append('rgba(220, 53, 69, 0.7)')  # Vermelho
+            border_colors.append('rgba(220, 53, 69, 1)')
+
+    # Recuperar o resumo mais recente
     ultimo_resumo = AvaliacaoResumo.query.filter_by(id_avaliacao=avaliacao_id).order_by(AvaliacaoResumo.data_criacao.desc()).first()
-    if not ultimo_resumo:  # Se não houver resumo, gere um novo
-        resumo = get_detailed_evaluation_summary(avaliacao, itens)
+    resumo = ultimo_resumo.resumo if ultimo_resumo else None
+
+    # Validar o resumo
+    required_sections = ["**Pontos Fortes:**", "**Áreas a Melhorar:**", "**Sugestões de Desenvolvimento:**"]
+    if resumo and (not all(section in resumo for section in required_sections) or resumo.strip().startswith("**Pontos Fortes:**") is False):
+        logger.warning(f"Resumo inválido encontrado no banco para avaliação ID {avaliacao_id}: {resumo[:100]}...")
+        resumo = get_detailed_evaluation_summary(avaliacao, itens, force_refresh=True)
         novo_resumo = AvaliacaoResumo(id_avaliacao=avaliacao_id, resumo=resumo)
         db.session.add(novo_resumo)
         db.session.commit()
-        logger.info(f"Novo resumo salvo para avaliação ID {avaliacao_id}")
-    else:
-        resumo = ultimo_resumo.resumo
-        logger.debug(f"Resumo recuperado do banco para avaliação ID {avaliacao_id}")
+        logger.info(f"Novo resumo gerado e salvo para avaliação ID {avaliacao_id} devido a resumo inválido")
+
+    # Se não há resumo, gerar um novo
+    if not resumo:
+        resumo = get_detailed_evaluation_summary(avaliacao, itens, force_refresh=True)
+        novo_resumo = AvaliacaoResumo(id_avaliacao=avaliacao_id, resumo=resumo)
+        db.session.add(novo_resumo)
+        db.session.commit()
+        logger.info(f"Resumo inicial gerado e salvo para avaliação ID {avaliacao_id}")
+
+    # Recuperar ações corretivas (se já geradas)
+    acoes_corretivas = get_corrective_actions(avaliacao, itens) if itens else None
+
+    # Inicializar variáveis para as novas abas
+    feedback_status = session.pop('feedback_status', None)
+    analise_comentarios = session.pop('analise_comentarios', None)
+    perguntas_feedback = session.pop('perguntas_feedback', None)
 
     logger.debug("Renderizando template com detalhes da avaliação")
     return render_template(
@@ -984,44 +1542,105 @@ def analisar_observacao(avaliacao_id):
         avaliacao=avaliacao,
         itens=itens,
         resumo=resumo,
-        usuario=g.usuario_logado
+        acoes_corretivas=acoes_corretivas,
+        feedback_status=feedback_status,
+        analise_comentarios=analise_comentarios,
+        perguntas_feedback=perguntas_feedback,
+        usuario=g.usuario_logado,
+        media_geral=media_geral,
+        background_colors=background_colors,
+        border_colors=border_colors
     )
 
 @app.route('/analisar_observacao/<int:avaliacao_id>/regenerar_resumo', methods=['POST'])
 def regenerar_resumo(avaliacao_id):
     if 'usuario_id' not in session:
+        logger.debug("Usuário não autenticado, redirecionando para login")
         return redirect(url_for('login'))
-    
+
     avaliacao = Avaliacao.query.get_or_404(avaliacao_id)
     if avaliacao.id_avaliador != g.usuario_logado.id and not g.usuario_logado.is_admin:
-        flash('Acesso negado.', 'danger')
-        return redirect(url_for('dashboard_colaboradores'))
-    
+        flash('Acesso negado: Você não tem permissão para regenerar o resumo.', 'danger')
+        return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id))
+
     itens = AvaliacaoItem.query.filter_by(id_avaliacao=avaliacao_id).all()
-    resumo = get_detailed_evaluation_summary(avaliacao, itens)
+    media_geral = sum(item.nota for item in itens) / len(itens) if itens else 0
+    sentimento = avaliacao.sentimento or "Não analisado"
+
+    # Invalidar o cache do Redis
+    cache_key = f"resumo:{avaliacao_id}:{sentimento}:{media_geral:.2f}"
+    try:
+        redis_client.delete(cache_key)
+        logger.debug(f"Cache Redis invalidado para chave: {cache_key}")
+    except Exception as e:
+        logger.warning(f"Erro ao invalidar cache Redis: {str(e)}")
+
+    # Gerar novo resumo
+    resumo = get_detailed_evaluation_summary(avaliacao, itens, force_refresh=True)
     novo_resumo = AvaliacaoResumo(id_avaliacao=avaliacao_id, resumo=resumo)
     db.session.add(novo_resumo)
+
+    # Opcional: remover resumos antigos para evitar acumulação
+    AvaliacaoResumo.query.filter(AvaliacaoResumo.id_avaliacao == avaliacao_id, AvaliacaoResumo.id != novo_resumo.id).delete()
+
     db.session.commit()
-    flash('Resumo regenerado e salvo com sucesso!', 'success')
-    logger.info(f"Novo resumo regenerado e salvo para avaliação ID {avaliacao_id}")
-    
-    return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id))
+    logger.info(f"Novo resumo salvo para avaliação ID {avaliacao_id}")
 
+    flash('Resumo regenerado com sucesso!', 'success')
+    return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id) + '#resumo')
+# Rota para gerar ações corretivas
 
-@app.route('/analises_sentimentos', methods=['GET'])
-def analises_sentimentos():
+@app.route('/gerar_acao_corretiva/<int:avaliacao_id>', methods=['POST'])
+def gerar_acao_corretiva(avaliacao_id):
     if 'usuario_id' not in session:
         logger.debug("Usuário não autenticado, redirecionando para login")
         return redirect(url_for('login'))
+
+    avaliacao = Avaliacao.query.get_or_404(avaliacao_id)
+    if avaliacao.id_avaliador != g.usuario_logado.id and not g.usuario_logado.is_admin:
+        flash('Acesso negado: Você não tem permissão para gerar ações corretivas.', 'danger')
+        return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id))
+
+    itens = AvaliacaoItem.query.filter_by(id_avaliacao=avaliacao_id).all()
+    acoes_corretivas = get_corrective_actions(avaliacao, itens)
     
-    logger.debug("Carregando análises de sentimentos")
-    sentimento_filtro = request.args.get('sentimento')
-    query = Avaliacao.query.filter(Avaliacao.sentimento != None)
-    if sentimento_filtro in ['Positivo', 'Negativo', 'Neutro']:
-        query = query.filter(Avaliacao.sentimento == sentimento_filtro)
-    avaliacoes = query.order_by(Avaliacao.data_avaliacao.desc()).all()
-    
-    return render_template('analises_sentimentos.html', avaliacoes=avaliacoes)
+    flash('Ações corretivas geradas com sucesso!', 'success')
+    return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id) + '#acoes')
+
+
+# Rota para enviar feedback ao colaborador
+@app.route('/gerar_feedback_colaborador/<int:avaliacao_id>', methods=['POST'])
+def gerar_feedback_colaborador(avaliacao_id):
+    if 'usuario_id' not in session:
+        logger.debug("Usuário não autenticado, redirecionando para login")
+        return redirect(url_for('login'))
+
+    avaliacao = Avaliacao.query.get_or_404(avaliacao_id)
+    if avaliacao.id_avaliador != g.usuario_logado.id and not g.usuario_logado.is_admin:
+        flash('Acesso negado: Você não tem permissão para enviar feedback.', 'danger')
+        return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id))
+
+    ultimo_resumo = AvaliacaoResumo.query.filter_by(id_avaliacao=avaliacao_id).order_by(AvaliacaoResumo.data_criacao.desc()).first()
+    if not ultimo_resumo:
+        flash('Nenhum resumo disponível para enviar ao colaborador.', 'warning')
+        return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id) + '#feedback')
+
+    resumo = ultimo_resumo.resumo
+    try:
+        msg = Message(
+            subject=f"Feedback da Avaliação #{avaliacao.id}",
+            sender=app.config['MAIL_DEFAULT_SENDER'],
+            recipients=[avaliacao.funcionario.email],
+            body=f"Olá, {avaliacao.funcionario.nome},\n\nSegue o feedback da sua avaliação:\n\n{resumo}\n\nAtenciosamente,\nEquipe de Gestão"
+        )
+        mail.send(msg)
+        session['feedback_status'] = f"Feedback enviado com sucesso para {avaliacao.funcionario.email}!"
+        logger.info(f"Feedback enviado para {avaliacao.funcionario.email} (Avaliação ID {avaliacao_id})")
+    except Exception as e:
+        logger.error(f"Erro ao enviar feedback: {str(e)}")
+        session['feedback_status'] = f"Erro ao enviar feedback: {str(e)}"
+
+    return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id) + '#feedback')
 
 
 

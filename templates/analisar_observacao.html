@@ -33,6 +33,26 @@
                 <i class="bi bi-file-text me-1"></i> Resumo Detalhado
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="acoes-tab" data-bs-toggle="tab" data-bs-target="#acoes" type="button" role="tab" aria-controls="acoes" aria-selected="false">
+                <i class="bi bi-gear-fill me-1"></i> Ações Corretivas
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="feedback-tab" data-bs-toggle="tab" data-bs-target="#feedback" type="button" role="tab" aria-controls="feedback" aria-selected="false">
+                <i class="bi bi-envelope-fill me-1"></i> Feedback ao Colaborador
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="analise-comentarios-tab" data-bs-toggle="tab" data-bs-target="#analise-comentarios" type="button" role="tab" aria-controls="analise-comentarios" aria-selected="false">
+                <i class="bi bi-chat-dots-fill me-1"></i> Análise de Comentários
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="perguntas-feedback-tab" data-bs-toggle="tab" data-bs-target="#perguntas-feedback" type="button" role="tab" aria-controls="perguntas-feedback" aria-selected="false">
+                <i class="bi bi-question-circle-fill me-1"></i> Perguntas de Feedback
+            </button>
+        </li>
     </ul>
 
     <div class="tab-content" id="avaliacaoTabsContent">
@@ -42,12 +62,20 @@
                 <div class="card-body">
                     <h5 class="card-title mb-3">Informações Gerais</h5>
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-2">
                             <p><strong><i class="bi bi-person me-1"></i> Funcionário Avaliado:</strong> {{ avaliacao.funcionario.nome }}</p>
                             <p><strong><i class="bi bi-person-check me-1"></i> Avaliador:</strong> {{ avaliacao.avaliador.nome }}</p>
+                            <p><strong><i class="bi bi-building me-1"></i> Setor:</strong> 
+                                <span class="badge bg-info">{{ avaliacao.funcionario.setor.nome if avaliacao.funcionario.setor else 'Sem setor' }}</span>
+                            </p>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-2">
                             <p><strong><i class="bi bi-calendar me-1"></i> Data:</strong> {{ avaliacao.data_avaliacao.strftime('%d/%m/%Y %H:%M') }}</p>
+                            <p><strong><i class="bi bi-star-fill me-1"></i> Média Geral:</strong> 
+                                <span class="badge bg-{{ 'success' if media_geral >= 4 else 'warning' if media_geral >= 2.5 else 'danger' }}">
+                                    {{ media_geral|round(2) }}/5
+                                </span>
+                            </p>
                             <p><strong><i class="bi bi-emoji-smile me-1"></i> Sentimento:</strong> 
                                 <span class="badge bg-{{ 'success' if avaliacao.sentimento == 'Positivo' else 'danger' if avaliacao.sentimento == 'Negativo' else 'warning' }}">
                                     {{ avaliacao.sentimento if avaliacao.sentimento else 'Não analisado' }}
@@ -55,12 +83,7 @@
                             </p>
                         </div>
                     </div>
-                    <div class="mb-3">
-                        <p class="mb-1"><strong><i class="bi bi-chat-left-text me-1"></i> Observações:</strong></p>
-                        <div class="p-3 bg-light rounded">
-                            {{ avaliacao.observacoes if avaliacao.observacoes else 'Nenhuma observação' }}
-                        </div>
-                    </div>
+                    <p><strong><i class="bi bi-chat-left-text me-1"></i> Observações:</strong> {{ avaliacao.observacoes if avaliacao.observacoes else 'Nenhuma observação' }}</p>
                 </div>
             </div>
         </div>
@@ -72,12 +95,12 @@
                     <h5 class="card-title mb-3">Notas das Habilidades</h5>
                     {% if itens %}
                         <!-- Gráfico das Notas -->
-                        <div class="mb-4" style="height: 300px;">
-                            <canvas id="graficoNotas"></canvas>
+                        <div class="mb-4">
+                            <canvas id="graficoNotas" style="max-height: 300px;"></canvas>
                         </div>
                         <!-- Tabela (colapsável) -->
                         <button class="btn btn-outline-primary btn-sm mb-3" type="button" data-bs-toggle="collapse" data-bs-target="#tabelaNotas" aria-expanded="false" aria-controls="tabelaNotas">
-                            <i class="bi bi-table"></i> Mostrar/Ocultar Tabela Detalhada
+                            Mostrar/Ocultar Tabela Detalhada
                         </button>
                         <div class="collapse" id="tabelaNotas">
                             <div class="table-responsive">
@@ -86,7 +109,8 @@
                                         <tr>
                                             <th>Categoria</th>
                                             <th>Habilidade</th>
-                                            <th class="text-end">Nota</th>
+                                            <th>Nota</th>
+                                            <th>Comentário</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -94,11 +118,12 @@
                                             <tr>
                                                 <td>{{ item.categoria }}</td>
                                                 <td>{{ item.nome_habilidade }}</td>
-                                                <td class="text-end">
-                                                    <span class="badge bg-{{ 'success' if item.nota >= 4 else 'warning' if item.nota >= 2.5 else 'danger' }}">
-                                                        {{ item.nota }}/5
+                                                <td>
+                                                    <span class="badge bg-{{ 'success' if item.nota >= 4 else 'warning' if item.nota >= 2.5 else 'danger' }} d-flex align-items-center">
+                                                        <i class="bi bi-star-fill me-1"></i>{{ item.nota }}/5
                                                     </span>
                                                 </td>
+                                                <td>{{ item.comentario if item.comentario else 'Sem comentário' }}</td>
                                             </tr>
                                         {% endfor %}
                                     </tbody>
@@ -106,9 +131,7 @@
                             </div>
                         </div>
                     {% else %}
-                        <div class="alert alert-info">
-                            <i class="bi bi-info-circle"></i> Nenhuma nota registrada para esta avaliação.
-                        </div>
+                        <p class="text-muted">Nenhuma nota registrada para esta avaliação.</p>
                     {% endif %}
                 </div>
             </div>
@@ -119,28 +142,185 @@
             <div class="card shadow-sm">
                 <div class="card-body">
                     <h5 class="card-title mb-3">Resumo Detalhado</h5>
-                    {% if resumo %}
-                    <div class="bg-light p-3 rounded">
-                        <p>{{ resumo | replace('**Pontos Fortes:**', '<strong class="text-success">Pontos Fortes:</strong>') | replace('**Áreas a Melhorar:**', '<strong class="text-warning">Áreas a Melhorar:</strong>') | replace('**Sugestões de Desenvolvimento:**', '<strong class="text-primary">Sugestões de Desenvolvimento:</strong>') | replace('\n', '</p><p>') | safe }}</p>
-                    </div>
-                        <form action="{{ url_for('regenerar_resumo', avaliacao_id=avaliacao.id) }}" method="POST" class="d-inline">
-                            <button type="submit" class="btn btn-sm btn-warning">
-                                <i class="bi bi-arrow-repeat"></i> Regenerar Resumo
-                            </button>
-                        </form>
-                    {% else %}
-                        <div class="alert alert-warning">
-                            <i class="bi bi-exclamation-triangle"></i> Nenhum resumo disponível para esta avaliação.
+                    <div class="p-3 rounded" style="background-color: #f8f9fa;">
+                        <div class="resumo-content">
+                            <!-- Adicionar log para depuração -->
+                            <script>
+                                console.log("Conteúdo bruto de resumo:", {{ resumo | tojson }});
+                            </script>
+                            {% if resumo %}
+                                {% set sections = ['**Pontos Fortes:**', '**Áreas a Melhorar:**', '**Sugestões de Desenvolvimento:**'] %}
+                                {% if sections|select('in', resumo)|list|length == 3 and resumo.strip().startswith('**Pontos Fortes:**') %}
+                                {{ resumo | extract_summary_sections | replace('**Pontos Fortes:**', '<h6 class="text-success fw-bold mb-2"><i class="bi bi-check-circle-fill me-1"></i>Pontos Fortes:</h6>') | 
+                                replace('**Áreas a Melhorar:**', '<h6 class="text-warning fw-bold mb-2"><i class="bi bi-exclamation-triangle-fill me-1"></i>Áreas a Melhorar:</h6>') | 
+                                replace('**Sugestões de Desenvolvimento:**', '<h6 class="text-primary fw-bold mb-2"><i class="bi bi-lightbulb-fill me-1"></i>Sugestões de Desenvolvimento:</h6>') | 
+                                replace('\n- Em seguida, uma quebra de linha.\n-', '<div class="mb-3"></div>') | 
+                                replace('\n\n', '</p><p class="mb-2">') | 
+                                replace('\n', '<br>') | safe }}
+                                {% else %}
+                                    <p class="text-muted">Resumo inválido ou incompleto. Clique no botão abaixo para regenerar.</p>
+                                    <div class="text-muted small">
+                                        <strong>Conteúdo bruto para depuração:</strong><br>
+                                        <pre>{{ resumo | safe }}</pre>
+                                    </div>
+                                {% endif %}
+                            {% else %}
+                                <p class="text-muted">Nenhum resumo disponível. Clique no botão abaixo para gerar um.</p>
+                            {% endif %}
                         </div>
-                    {% endif %}
+                    </div>
+                    <form action="{{ url_for('regenerar_resumo', avaliacao_id=avaliacao.id) }}" method="POST" class="d-inline mt-3">
+                        <button type="submit" class="btn btn-sm btn-warning"><i class="bi bi-arrow-repeat me-1"></i>Regenerar Resumo</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Aba: Ações Corretivas -->
+        <div class="tab-pane fade" id="acoes" role="tabpanel" aria-labelledby="acoes-tab">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title mb-3">Ações Corretivas</h5>
+                    <div class="p-3 rounded" style="background-color: #f8f9fa;">
+                        <ul class="list-unstyled">
+                            {% if acoes_corretivas %}
+                                {% for acao in acoes_corretivas.split('\n') if acoes_corretivas is string %}
+                                    {% if acao.strip().startswith('- ') %}
+                                        <li class="mb-2"><i class="bi bi-gear-fill text-primary me-2"></i>{{ acao.strip()[2:] }}</li>
+                                    {% else %}
+                                        <li class="mb-2"><i class="bi bi-gear-fill text-primary me-2"></i>{{ acao.strip() }}</li>
+                                    {% endif %}
+                                {% endfor %}
+                                {% if acoes_corretivas is iterable and acoes_corretivas is not string %}
+                                    {% for acao in acoes_corretivas %}
+                                        <li class="mb-2"><i class="bi bi-gear-fill text-primary me-2"></i>{{ acao.strip()[2:] if acao.startswith('- ') else acao }}</li>
+                                    {% endfor %}
+                                {% endif %}
+                            {% else %}
+                                <li class="mb-2 text-muted"><i class="bi bi-gear-fill text-primary me-2"></i>Nenhuma ação corretiva disponível. Clique no botão abaixo para gerar.</li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                    <form action="{{ url_for('gerar_acao_corretiva', avaliacao_id=avaliacao.id) }}" method="POST" class="d-inline mt-3">
+                        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-gear-fill me-1"></i>Gerar Ações Corretivas</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Aba: Feedback ao Colaborador -->
+        <div class="tab-pane fade" id="feedback" role="tabpanel" aria-labelledby="feedback-tab">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title mb-3">Feedback ao Colaborador</h5>
+                    <div class="p-3 rounded" style="background-color: #f8f9fa;">
+                        {% if feedback_status %}
+                            <p class="text-success"><i class="bi bi-check-circle-fill me-1"></i>{{ feedback_status }}</p>
+                        {% else %}
+                            <p class="text-muted">Clique no botão abaixo para enviar o feedback ao colaborador.</p>
+                        {% endif %}
+                    </div>
+                    <form action="{{ url_for('gerar_feedback_colaborador', avaliacao_id=avaliacao.id) }}" method="POST" class="d-inline mt-3">
+                        <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-envelope-fill me-1"></i>Enviar Feedback ao Colaborador</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Aba: Análise de Comentários -->
+        <div class="tab-pane fade" id="analise-comentarios" role="tabpanel" aria-labelledby="analise-comentarios-tab">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title mb-3">Análise de Comentários</h5>
+                    <div class="p-3 rounded" style="background-color: #f8f9fa;">
+                        {% if analise_comentarios %}
+                            <div class="analise-content">
+                                {{ analise_comentarios | replace('Sentimento: Positivo', '<strong class="text-success">Sentimento: Positivo</strong>') | 
+                                  replace('Sentimento: Negativo', '<strong class="text-danger">Sentimento: Negativo</strong>') | 
+                                  replace('Sentimento: Neutro', '<strong class="text-warning">Sentimento: Neutro</strong>') | 
+                                  replace('Explicação:', '<br><strong>Explicação:</strong>') | 
+                                  replace('\n', '<br>') | safe }}
+                            </div>
+                        {% else %}
+                            <p class="text-muted">Nenhum comentário analisado. Clique no botão abaixo para analisar os comentários.</p>
+                        {% endif %}
+                    </div>
+                    <form action="{{ url_for('analisar_comentarios_habilidades', avaliacao_id=avaliacao.id) }}" method="POST" class="d-inline mt-3">
+                        <button type="submit" class="btn btn-sm btn-info"><i class="bi bi-chat-dots-fill me-1"></i>Analisar Comentários</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Aba: Perguntas de Feedback -->
+        <div class="tab-pane fade" id="perguntas-feedback" role="tabpanel" aria-labelledby="perguntas-feedback-tab">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title mb-3">Perguntas de Feedback</h5>
+                    <div class="p-3 rounded" style="background-color: #f8f9fa;">
+                        {% if perguntas_feedback %}
+                            <!-- Adicionar log para depuração -->
+                            <script>
+                                console.log("Conteúdo bruto de perguntas_feedback:", {{ perguntas_feedback | tojson }});
+                            </script>
+
+                            {% set linhas = perguntas_feedback.split('\n') %}
+                            {% set timestamp = linhas[0] if linhas else "Timestamp não disponível" %}
+                            {% set perguntas = linhas[2:] if linhas|length > 2 else [] %}
+
+                            <div class="mb-3 text-muted small">
+                                {{ timestamp | safe }}
+                            </div>
+
+                            {% if perguntas and perguntas|reject('eq', '')|list %}
+                                {% set perguntas_validas = [] %}
+                                {% for pergunta in perguntas %}
+                                    {% if pergunta.strip() and not pergunta.strip().startswith("Habilidades com Notas Baixas") and not pergunta.strip().startswith("Nenhuma pergunta válida gerada") %}
+                                        {% do perguntas_validas.append(pergunta) %}
+                                    {% endif %}
+                                {% endfor %}
+
+                                {% if perguntas_validas %}
+                                    <ul class="list-unstyled" id="lista-perguntas">
+                                        {% for pergunta in perguntas_validas %}
+                                            {% if pergunta.strip() %}
+                                                <li class="mb-3 p-3 rounded" style="background-color: #e9ecef;">
+                                                    <span class="fw-bold text-primary">{{ loop.index }}.</span>
+                                                    <span class="ms-2">{{ pergunta.strip() }}</span>
+                                                </li>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </ul>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary mt-2" onclick="copiarPerguntas()">
+                                        <i class="bi bi-clipboard me-1"></i>Copiar Perguntas
+                                    </button>
+                                {% else %}
+                                    <p class="text-muted">Nenhuma pergunta válida gerada. Tente novamente ou verifique os dados da avaliação.</p>
+                                    <div class="text-muted small">
+                                        <strong>Conteúdo bruto para depuração:</strong><br>
+                                        <pre>{{ perguntas_feedback | safe }}</pre>
+                                    </div>
+                                {% endif %}
+                            {% else %}
+                                <p class="text-muted">Nenhuma pergunta disponível. Tente novamente ou verifique os dados da avaliação.</p>
+                                <div class="text-muted small">
+                                    <strong>Conteúdo bruto para depuração:</strong><br>
+                                        <pre>{{ perguntas_feedback | safe }}</pre>
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            <p class="text-muted">Nenhuma pergunta gerada. Clique no botão abaixo para gerar perguntas de feedback.</p>
+                        {% endif %}
+                    </div>
+                    <form action="{{ url_for('gerar_perguntas_feedback', avaliacao_id=avaliacao.id) }}" method="POST" class="d-inline mt-3">
+                        <button type="submit" class="btn btn-sm btn-info"><i class="bi bi-question-circle-fill me-1"></i>Gerar Perguntas de Feedback</button>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
 
-    <a href="{{ url_for('dashboard_colaboradores') }}" class="btn btn-secondary mt-3">
-        <i class="bi bi-arrow-left"></i> Voltar
-    </a>
+    <a href="{{ url_for('dashboard_colaboradores') }}" class="btn btn-secondary mt-3"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
 </div>
 
 <!-- Script para o gráfico -->
@@ -148,24 +328,6 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const ctx = document.getElementById('graficoNotas').getContext('2d');
-    
-    // Preparar cores baseadas nas notas
-    const backgroundColors = [];
-    const borderColors = [];
-    
-    {% for item in itens %}
-        {% if item.nota >= 4 %}
-            backgroundColors.push('rgba(40, 167, 69, 0.7)');
-            borderColors.push('rgba(40, 167, 69, 1)');
-        {% elif item.nota >= 2.5 %}
-            backgroundColors.push('rgba(255, 193, 7, 0.7)');
-            borderColors.push('rgba(255, 193, 7, 1)');
-        {% else %}
-            backgroundColors.push('rgba(220, 53, 69, 0.7)');
-            borderColors.push('rgba(220, 53, 69, 1)');
-        {% endif %}
-    {% endfor %}
-
     new Chart(ctx, {
         type: 'bar',
         data: {
@@ -173,14 +335,13 @@ document.addEventListener('DOMContentLoaded', function() {
             datasets: [{
                 label: 'Nota',
                 data: {{ itens | map(attribute='nota') | list | tojson }},
-                backgroundColor: backgroundColors,
-                borderColor: borderColors,
+                backgroundColor: {{ background_colors | tojson }},
+                borderColor: {{ border_colors | tojson }},
                 borderWidth: 1
             }]
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false,
             plugins: {
                 legend: {
                     display: false
@@ -188,7 +349,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 tooltip: {
                     callbacks: {
                         label: function(context) {
-                            return `${context.label}: ${context.raw}/5`;
+                            const comentario = {{ itens | map(attribute='comentario') | list | tojson }}[context.dataIndex] || 'Sem comentário';
+                            return `${context.label}: ${context.raw}/5\nComentário: ${comentario}`;
                         }
                     }
                 }
@@ -214,4 +376,62 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endif %}
+
+<!-- Script para copiar perguntas -->
+<script>
+function copiarPerguntas() {
+    console.log("Função copiarPerguntas chamada");
+
+    // Selecionar os elementos das perguntas
+    const listaPerguntas = document.querySelector('#lista-perguntas');
+    if (!listaPerguntas) {
+        console.error("Lista de perguntas não encontrada. Seletor #lista-perguntas não existe.");
+        alert("Erro: Lista de perguntas não encontrada.");
+        return;
+    }
+
+    const perguntasElementos = listaPerguntas.querySelectorAll('li');
+    if (perguntasElementos.length === 0) {
+        console.warn("Nenhuma pergunta encontrada na lista.");
+        alert("Nenhuma pergunta disponível para copiar.");
+        return;
+    }
+
+    // Extrair o texto das perguntas, removendo a numeração
+    const perguntasTexto = Array.from(perguntasElementos).map((li, index) => {
+        const texto = li.textContent.trim().replace(/^\d+\.\s*/, ''); // Remove "1. ", "2. ", etc.
+        return `${index + 1}. ${texto}`; // Reconstroi a numeração para o texto copiado
+    }).join('\n');
+
+    console.log("Texto a ser copiado:", perguntasTexto);
+
+    // Tentar copiar usando a API do Clipboard
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(perguntasTexto).then(() => {
+            console.log("Perguntas copiadas com sucesso!");
+            alert("Perguntas copiadas para a área de transferência!");
+        }).catch(err => {
+            console.error("Erro ao copiar usando navigator.clipboard:", err);
+            alert("Erro ao copiar perguntas: " + err.message);
+        });
+    } else {
+        // Fallback para navegadores que não suportam a API do Clipboard
+        console.warn("API do Clipboard não suportada. Usando fallback.");
+        const textarea = document.createElement('textarea');
+        textarea.value = perguntasTexto;
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+            console.log("Perguntas copiadas com sucesso usando fallback!");
+            alert("Perguntas copiadas para a área de transferência!");
+        } catch (err) {
+            console.error("Erro ao copiar usando fallback:", err);
+            alert("Erro ao copiar perguntas: " + err.message);
+        } finally {
+            document.body.removeChild(textarea);
+        }
+    }
+}
+</script>
 {% endblock %}

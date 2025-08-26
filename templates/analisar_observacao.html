@@ -177,36 +177,51 @@
         </div>
 
         <!-- Aba: Ações Corretivas -->
-        <div class="tab-pane fade" id="acoes" role="tabpanel" aria-labelledby="acoes-tab">
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <h5 class="card-title mb-3">Ações Corretivas</h5>
-                    <div class="p-3 rounded" style="background-color: #f8f9fa;">
-                        <ul class="list-unstyled">
-                            {% if acoes_corretivas %}
-                                {% for acao in acoes_corretivas.split('\n') if acoes_corretivas is string %}
-                                    {% if acao.strip().startswith('- ') %}
-                                        <li class="mb-2"><i class="bi bi-gear-fill text-primary me-2"></i>{{ acao.strip()[2:] }}</li>
-                                    {% else %}
-                                        <li class="mb-2"><i class="bi bi-gear-fill text-primary me-2"></i>{{ acao.strip() }}</li>
-                                    {% endif %}
-                                {% endfor %}
-                                {% if acoes_corretivas is iterable and acoes_corretivas is not string %}
-                                    {% for acao in acoes_corretivas %}
-                                        <li class="mb-2"><i class="bi bi-gear-fill text-primary me-2"></i>{{ acao.strip()[2:] if acao.startswith('- ') else acao }}</li>
-                                    {% endfor %}
-                                {% endif %}
-                            {% else %}
-                                <li class="mb-2 text-muted"><i class="bi bi-gear-fill text-primary me-2"></i>Nenhuma ação corretiva disponível. Clique no botão abaixo para gerar.</li>
-                            {% endif %}
-                        </ul>
-                    </div>
-                    <form action="{{ url_for('gerar_acao_corretiva', avaliacao_id=avaliacao.id) }}" method="POST" class="d-inline mt-3">
-                        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-gear-fill me-1"></i>Gerar Ações Corretivas</button>
-                    </form>
-                </div>
+     <!-- Aba: Ações Corretivas -->
+<div class="tab-pane fade" id="acoes" role="tabpanel" aria-labelledby="acoes-tab">
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title mb-3">Ações Corretivas</h5>
+            <div class="p-3 rounded" style="background-color: #f8f9fa;">
+                <!-- Adicionar log para depuração -->
+                <script>
+                    console.log("Conteúdo bruto de acoes_corretivas:", {{ acoes_corretivas | tojson }});
+                </script>
+                <ul class="list-unstyled">
+                    {% if acoes_corretivas %}
+                        {% if acoes_corretivas.startswith('- Não foi possível') or acoes_corretivas.startswith('- Nenhuma ação corretiva válida') %}
+                            <li class="mb-2 text-danger">
+                                <i class="bi bi-exclamation-circle-fill me-2"></i>
+                                {{ acoes_corretivas[2:] if acoes_corretivas.startswith('- ') else acoes_corretivas }}
+                            </li>
+                            <li class="mb-2 text-muted small">
+                                <strong>Conteúdo bruto para depuração:</strong><br>
+                                <pre>{{ acoes_corretivas | safe }}</pre>
+                            </li>
+                        {% else %}
+                            {% for acao in acoes_corretivas.split('\n') if acao.strip() %}
+                                <li class="mb-2">
+                                    <i class="bi bi-gear-fill text-primary me-2"></i>
+                                    {{ acao.strip()[2:] if acao.strip().startswith('- ') else acao.strip() }}
+                                </li>
+                            {% endfor %}
+                        {% endif %}
+                    {% else %}
+                        <li class="mb-2 text-muted">
+                            <i class="bi bi-gear-fill text-primary me-2"></i>
+                            Nenhuma ação corretiva disponível. Clique no botão abaixo para gerar.
+                        </li>
+                    {% endif %}
+                </ul>
             </div>
+            <form action="{{ url_for('gerar_acao_corretiva', avaliacao_id=avaliacao.id) }}" method="POST" class="d-inline mt-3">
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="bi bi-gear-fill me-1"></i>Gerar Ações Corretivas
+                </button>
+            </form>
         </div>
+    </div>
+</div>
 
         <!-- Aba: Feedback ao Colaborador -->
         <div class="tab-pane fade" id="feedback" role="tabpanel" aria-labelledby="feedback-tab">
@@ -223,6 +238,11 @@
                     <form action="{{ url_for('gerar_feedback_colaborador', avaliacao_id=avaliacao.id) }}" method="POST" class="d-inline mt-3">
                         <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-envelope-fill me-1"></i>Enviar Feedback ao Colaborador</button>
                     </form>
+                                        {% if feedback_status %}
+                        <form action="{{ url_for('gerar_feedback_colaborador', avaliacao_id=avaliacao.id) }}" method="POST" class="d-inline me-2">
+                            <button type="submit" class="btn btn-sm btn-warning"><i class="bi bi-arrow-repeat me-1"></i>Reenviar Feedback</button>
+                        </form>
+                    {% endif %}
                 </div>
             </div>
         </div>

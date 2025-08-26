@@ -1,8 +1,8 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, g, make_response,jsonify,json,request
+from flask import Flask, render_template, request, redirect, url_for, session, flash, g, make_response,jsonify,json,request,send_file
 from models import db, Usuario, Feedback, NotaPermitida, AvaliacaoResumo, ConfiguracaoAvaliacao, Resposta, AcaoCorretiva, Avaliacao, AvaliacaoItem, Setor, Habilidades, CategoriaHabilidade
 from datetime import datetime,timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
-from weasyprint import HTML
+import pdfkit
 from io import BytesIO
 from collections import defaultdict
 from flask_mail import Mail, Message
@@ -11,8 +11,9 @@ import matplotlib
 matplotlib.use('Agg')  # Usar backend não interativo
 import matplotlib.pyplot as plt
 import seaborn as sns
-import os,  base64,  logging,  secrets,  urllib.parse, requests, redis,re
-
+import os,  base64,  logging,  secrets,  urllib.parse, requests, redis,re,io
+# ... (outras importações mantidas)
+import numpy as np
 
 
 
@@ -25,7 +26,7 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-
+0
 
 @app.template_filter('extract_summary_sections')
 def extract_summary_sections(text):
@@ -61,6 +62,7 @@ app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = 'nayhanbsb@gmail.com'
 app.config['MAIL_PASSWORD'] = 'txkt aiqx qqvk vjdr'
+app.config['MAIL_DEFAULT_SENDER'] = ('Sistema de Avaliação', 'nayhanbsb@gmail.com')
 mail = Mail(app)
 
 
@@ -464,6 +466,7 @@ def bibliotecas():
     return render_template('bibliotecas.html', usuario=g.usuario_logado)
 
 
+
 @app.route('/relatorio/completo')
 def exportar_relatorio_completo():
     if 'usuario_id' not in session or not g.usuario_logado.is_admin:
@@ -489,17 +492,20 @@ def exportar_relatorio_completo():
         avaliacoes = Avaliacao.query.filter_by(id_funcionario=f.id).all()
         total = len(avaliacoes)
         if total == 0:  # Excluir funcionários sem avaliações
+            logger.debug(f"Funcionário {f.nome} excluído: sem avaliações")
             continue
 
-        if total > 0:
-            notas = AvaliacaoItem.query.join(Avaliacao, AvaliacaoItem.id_avaliacao == Avaliacao.id)
-            notas = notas.filter(Avaliacao.id_funcionario == f.id)
-            media_geral = round(sum(i.nota for i in notas) / notas.count(), 2)
-        else:
-            media_geral = 0
+        # Consultar itens de avaliação diretamente
+        notas = AvaliacaoItem.query.join(Avaliacao, AvaliacaoItem.id_avaliacao == Avaliacao.id).filter(Avaliacao.id_funcionario == f.id).all()
+        if not notas:  # Excluir funcionários sem notas
+            logger.debug(f"Funcionário {f.nome} excluído: sem notas em avaliações")
+            continue
+
+        media_geral = round(sum(i.nota for i in notas) / len(notas), 2) if notas else 0
 
         # Aplicar filtros de média
         if (media_min is not None and media_geral < media_min) or (media_max is not None and media_geral > media_max):
+            logger.debug(f"Funcionário {f.nome} excluído: média {media_geral} fora do intervalo ({media_min}, {media_max})")
             continue
 
         dados_dashboard.append({
@@ -511,6 +517,8 @@ def exportar_relatorio_completo():
         })
         funcionario_ids.append(f.id)
 
+    logger.info(f"Total de funcionários com avaliações e notas após filtros: {len(dados_dashboard)}")
+
     # Consultar avaliações apenas dos funcionários filtrados
     avaliacoes = Avaliacao.query.filter(Avaliacao.id_funcionario.in_(funcionario_ids)).order_by(Avaliacao.data_avaliacao.desc()).all()
     dados_avaliacoes = []
@@ -519,13 +527,17 @@ def exportar_relatorio_completo():
         avaliador = Usuario.query.get(av.id_avaliador)
         itens = AvaliacaoItem.query.filter_by(id_avaliacao=av.id).all()
 
+        # Gerar o resumo detalhado para a avaliação atual
+        resumo_detalhado = get_detailed_evaluation_summary(av, itens, force_refresh=False)
+
         dados_avaliacoes.append({
             'id': av.id,
             'funcionario': funcionario.nome if funcionario else 'Desconhecido',
             'avaliador': avaliador.nome if avaliador else 'Desconhecido',
             'data': av.data_avaliacao.strftime('%d/%m/%Y'),
             'observacoes': av.observacoes,
-            'itens': itens
+            'itens': itens,
+            'resumo_detalhado': resumo_detalhado
         })
 
     # Resumo de habilidades apenas para avaliações filtradas
@@ -550,6 +562,28 @@ def exportar_relatorio_completo():
         for nome, dados in resumo.items()
     ]
 
+    # Agregar médias por categoria
+    resumo_categorias = defaultdict(lambda: {'total_habilidades': 0, 'soma_medias': 0})
+    for habilidade in resumo_habilidades:
+        categoria = habilidade['categoria']
+        resumo_categorias[categoria]['total_habilidades'] += 1
+        resumo_categorias[categoria]['soma_medias'] += habilidade['media']
+
+    medias_por_categoria = [
+        {
+            'categoria': categoria,
+            'media': round(dados['soma_medias'] / dados['total_habilidades'], 2) if dados['total_habilidades'] > 0 else 0
+        }
+        for categoria, dados in resumo_categorias.items()
+    ]
+
+    # Sort categories alphabetically for consistent radar chart
+    medias_por_categoria.sort(key=lambda x: x['categoria'])
+    categorias = [d['categoria'] for d in medias_por_categoria]
+    medias_categoria = [d['media'] for d in medias_por_categoria]
+
+    logger.info(f"Total de categorias com médias calculadas: {len(medias_por_categoria)}")
+
     # Criar diretório temporário no projeto
     temp_dir = os.path.join(os.path.dirname(__file__), 'static', 'temp')
     try:
@@ -560,10 +594,15 @@ def exportar_relatorio_completo():
         flash('Erro ao configurar diretório temporário. Contate o administrador.', 'danger')
         return redirect(url_for('dashboard_colaboradores'))
 
-    bar_chart_path = os.path.join(temp_dir, 'bar_chart.png')
-    pie_chart_path = os.path.join(temp_dir, 'pie_chart.png')
+    bar_chart_path = os.path.join(temp_dir, 'bar_chart.png')  # Média por Colaborador
+    histogram_path = os.path.join(temp_dir, 'histogram.png')  # Histograma de Médias
+    radar_chart_path = os.path.join(temp_dir, 'radar_chart.png')  # Média por Categoria (Radar)
+    category_bar_chart_path = os.path.join(temp_dir, 'category_bar_chart.png')  # Média por Categoria (Barras)
+
     bar_chart_base64 = None
-    pie_chart_base64 = None
+    histogram_base64 = None
+    radar_chart_base64 = None
+    category_bar_chart_base64 = None
 
     # Gerar gráficos
     try:
@@ -583,60 +622,119 @@ def exportar_relatorio_completo():
             plt.tight_layout()
             plt.savefig(bar_chart_path, format='png', dpi=150)
             plt.close()
-            logger.debug(f"Gráfico de barras salvo em: {bar_chart_path}")
+            logger.debug(f"Gráfico de barras (Colaborador) salvo em: {bar_chart_path}")
 
             # Converter para base64
             with open(bar_chart_path, 'rb') as f:
                 bar_chart_base64 = base64.b64encode(f.read()).decode('utf-8')
-            logger.debug(f"Gráfico de barras convertido para base64 ({len(bar_chart_base64)} bytes)")
+            logger.debug(f"Gráfico de barras (Colaborador) convertido para base64 ({len(bar_chart_base64)} bytes)")
 
-            # Gráfico de pizza (Distribuição)
-            faixas = [
-                len([d for d in dados_dashboard if d['media_geral'] <= 2]),
-                len([d for d in dados_dashboard if 2 < d['media_geral'] < 4]),
-                len([d for d in dados_dashboard if d['media_geral'] >= 4])
-            ]
-            logger.debug(f"Faixas do gráfico de pizza: {faixas}")
-            if sum(faixas) > 0:  # Verificar se há dados para o gráfico
-                labels = ['1-2 Estrelas', '2.5-3.5 Estrelas', '4-5 Estrelas']
-                colors = ['#dc3545', '#ffc107', '#198754']
+            # Histograma de Médias Gerais
+            media_geral_total = sum(medias) / len(medias) if medias else 0
+            plt.figure(figsize=(4, 4))
+            sns.histplot(medias, bins=10, color='#ff7f0e', kde=False, stat='count')
+            plt.axvline(x=media_geral_total, color='red', linestyle='--', label=f'Média: {media_geral_total:.2f}')
+            plt.xlabel('Média Geral')
+            plt.ylabel('Número de Colaboradores')
+            plt.xlim(0, 5)
+            plt.legend()
+            plt.tight_layout()
+            plt.savefig(histogram_path, format='png', dpi=150)
+            plt.close()
+            logger.debug(f"Histograma de médias salvo em: {histogram_path}")
 
-                plt.figure(figsize=(4, 4))
-                plt.pie(faixas, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
+            # Converter para base64
+            with open(histogram_path, 'rb') as f:
+                histogram_base64 = base64.b64encode(f.read()).decode('utf-8')
+            logger.debug(f"Histograma convertido para base64 ({len(histogram_base64)} bytes)")
+
+        else:
+            logger.warning("Nenhum dado em dados_dashboard para gerar gráficos de Colaborador e Histograma")
+
+        # Geração dos gráficos de categoria
+        if medias_por_categoria:
+            logger.debug(f"Gerando gráficos para {len(medias_por_categoria)} categorias")
+
+            # Gráfico de Radar (Média por Categoria)
+            num_categorias = len(categorias)
+            if num_categorias >= 3:  # Radar chart precisa de pelo menos 3 categorias
+                angles = np.linspace(0, 2 * np.pi, num_categorias, endpoint=False).tolist()
+                values = medias_categoria
+
+                # Fechar o gráfico de radar
+                values = values + [values[0]]
+                angles = angles + [angles[0]]
+
+                fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(polar=True))
+                ax.fill(angles, values, color='#0d6efd', alpha=0.25)
+                ax.plot(angles, values, color='#0d6efd', linewidth=2)
+                ax.set_thetagrids(np.degrees(angles[:-1]), categorias)
+                ax.set_title("Média por Categoria", va='bottom')
+                ax.set_ylim(0, 5)
                 plt.tight_layout()
-                plt.savefig(pie_chart_path, format='png', dpi=150)
+                plt.savefig(radar_chart_path, format='png', dpi=150)
                 plt.close()
-                logger.debug(f"Gráfico de pizza salvo em: {pie_chart_path}")
+                logger.debug(f"Gráfico de radar salvo em: {radar_chart_path}")
 
                 # Converter para base64
-                with open(pie_chart_path, 'rb') as f:
-                    pie_chart_base64 = base64.b64encode(f.read()).decode('utf-8')
-                logger.debug(f"Gráfico de pizza convertido para base64 ({len(pie_chart_base64)} bytes)")
+                with open(radar_chart_path, 'rb') as f:
+                    radar_chart_base64 = base64.b64encode(f.read()).decode('utf-8')
+                logger.debug(f"Gráfico de radar convertido para base64 ({len(radar_chart_base64)} bytes)")
             else:
-                logger.warning("Nenhum dado válido para o gráfico de pizza")
+                logger.warning(f"Número insuficiente de categorias ({num_categorias}) para o gráfico de radar. Mínimo necessário: 3")
+
+            # Gráfico de Barras (Média por Categoria)
+            if num_categorias > 0:
+                plt.figure(figsize=(8, max(4, num_categorias * 0.5)))
+                ax = sns.barplot(x=medias_categoria, y=categorias, color='#198754')
+                plt.xlabel('Média')
+                plt.ylabel('Categoria')
+                plt.xlim(0, 5)
+                for i, v in enumerate(medias_categoria):
+                    ax.text(v + 0.1, i, f'{v:.2f}', va='center')
+                plt.title('Média por Categoria (Barras)')
+                plt.tight_layout()
+                plt.savefig(category_bar_chart_path, format='png', dpi=150)
+                plt.close()
+                logger.debug(f"Gráfico de barras (Categoria) salvo em: {category_bar_chart_path}")
+
+                # Converter para base64
+                with open(category_bar_chart_path, 'rb') as f:
+                    category_bar_chart_base64 = base64.b64encode(f.read()).decode('utf-8')
+                logger.debug(f"Gráfico de barras (Categoria) convertido para base64 ({len(category_bar_chart_base64)} bytes)")
+            else:
+                logger.warning("Nenhum dado válido para o gráfico de barras por categoria")
         else:
-            logger.warning("Nenhum dado em dados_dashboard para gerar gráficos")
+            logger.warning("Nenhum dado em medias_por_categoria para gerar gráficos de Categoria")
+
     except Exception as e:
         logger.error(f"Erro ao gerar gráficos: {str(e)}")
         bar_chart_base64 = None
-        pie_chart_base64 = None
-        
+        histogram_base64 = None
+        radar_chart_base64 = None
+        category_bar_chart_base64 = None
+
     # Renderizar PDF
     try:
         rendered = render_template('relatorio_completo_pdf.html',
-                                  dados_dashboard=dados_dashboard,
-                                  dados_avaliacoes=dados_avaliacoes,
-                                  resumo_habilidades=resumo_habilidades,
-                                  bar_chart_base64=bar_chart_base64,
-                                  pie_chart_base64=pie_chart_base64,
-                                  setor_filtro=setor_filtro,
-                                  nome_filtro=nome_filtro,
-                                  media_min=media_min,
-                                  media_max=media_max,
-                                  data_geracao=data_geracao,
-                                  usuario=usuario)
-        
-        pdf = HTML(string=rendered).write_pdf()
+                                   dados_dashboard=dados_dashboard,
+                                   dados_avaliacoes=dados_avaliacoes,
+                                   resumo_habilidades=resumo_habilidades,
+                                   bar_chart_base64=bar_chart_base64,
+                                   histogram_base64=histogram_base64,
+                                   radar_chart_base64=radar_chart_base64,
+                                   category_bar_chart_base64=category_bar_chart_base64,
+                                   setor_filtro=setor_filtro,
+                                   nome_filtro=nome_filtro,
+                                   media_min=media_min,
+                                   media_max=media_max,
+                                   data_geracao=data_geracao,
+                                   usuario=usuario,
+                                   categorias=categorias)
+
+        # Configurar pdfkit para Windows
+        config = pdfkit.configuration(wkhtmltopdf='C:\\Program Files\\wkhtmltopdf\\bin\\wkhtmltopdf.exe')
+        pdf = pdfkit.from_string(rendered, False, configuration=config)
         logger.debug("PDF renderizado com sucesso")
     except Exception as e:
         logger.error(f"Erro ao renderizar PDF: {str(e)}")
@@ -645,114 +743,18 @@ def exportar_relatorio_completo():
 
     # Limpar arquivos temporários
     try:
-        if os.path.exists(bar_chart_path):
-            os.remove(bar_chart_path)
-            logger.debug(f"Arquivo temporário removido: {bar_chart_path}")
-        if os.path.exists(pie_chart_path):
-            os.remove(pie_chart_path)
-            logger.debug(f"Arquivo temporário removido: {pie_chart_path}")
+        for path in [bar_chart_path, histogram_path, radar_chart_path, category_bar_chart_path]:
+            if os.path.exists(path):
+                os.remove(path)
+                logger.debug(f"Arquivo temporário removido: {path}")
     except Exception as e:
-        logger.error(f"Erro ao limpar arquivos temporESETtários: {str(e)}")
+        logger.error(f"Erro ao limpar arquivos temporários: {str(e)}")
 
     response = make_response(pdf)
     response.headers['Content-Type'] = 'application/pdf'
     response.headers['Content-Disposition'] = 'inline; filename=relatorio_completo.pdf'
     return response
-
-# ... (outras rotas mantidas inalteradas)
-
-@app.route('/relatorio_setor/<int:setor_id>', methods=['GET'])
-def relatorio_setor(setor_id):
-    if 'usuario_id' not in session:
-        return redirect(url_for('login'))
-    
-    if not g.usuario_logado.is_admin:
-        flash('Acesso negado: Apenas administradores podem gerar relatórios de setor.', 'danger')
-        return redirect(url_for('dashboard_colaboradores'))
-    
-    setor = Setor.query.get_or_404(setor_id)
-    colaboradores = Usuario.query.filter_by(setor_id=setor_id).all()
-    avaliacoes = Avaliacao.query.join(Usuario).filter(Usuario.setor_id == setor_id).all()
-
-    if not avaliacoes:
-        flash('Nenhuma avaliação encontrada para este setor.', 'warning')
-        return redirect(url_for('dashboard_colaboradores'))
-
-    # Calcular métricas
-    media_geral_setor = 0
-    sentimentos = {'Positivo': 0, 'Negativo': 0, 'Neutro': 0}
-    total_avaliacoes = len(avaliacoes)
-    habilidades_notas = defaultdict(list)
-
-    for avaliacao in avaliacoes:
-        itens = AvaliacaoItem.query.filter_by(id_avaliacao=avaliacao.id).all()
-        media = sum(item.nota for item in itens) / len(itens) if itens else 0
-        media_geral_setor += media
-        sentimento = avaliacao.sentimento or 'Neutro'
-        sentimentos[sentimento] += 1
-        for item in itens:
-            habilidade_key = f"{item.categoria} - {item.nome_habilidade}"
-            habilidades_notas[habilidade_key].append(item.nota)
-
-    media_geral_setor = media_geral_setor / total_avaliacoes if total_avaliacoes else 0
-    sentimentos_info = "\n".join([f"- {sentimento}: {count} avaliações" for sentimento, count in sentimentos.items()])
-    habilidades_info = "\n".join([
-        f"- {habilidade}: Média {sum(notas)/len(notas):.2f}/5"
-        for habilidade, notas in habilidades_notas.items()
-    ])
-
-    prompt = (
-        "Você é um assistente de RH especializado em análise de desempenho de equipes. "
-        "Com base nas informações fornecidas, gere um relatório detalhado sobre o desempenho do setor. "
-        "Divida o relatório em três seções: **Visão Geral**, **Pontos Fortes e Áreas a Melhorar**, e **Sugestões para o Setor**. "
-        "Use o formato abaixo:\n"
-        "**Visão Geral:**\n(texto da seção)\n\n"
-        "**Pontos Fortes e Áreas a Melhorar:**\n(texto da seção)\n\n"
-        "**Sugestões para o Setor:**\n(texto da seção)\n\n"
-        "Forneça um relatório de até 400 palavras, com linguagem profissional e insights práticos.\n\n"
-        f"**Informações do Setor**:\n"
-        f"Nome do Setor: {setor.nome}\n"
-        f"Total de Colaboradores: {len(colaboradores)}\n"
-        f"Total de Avaliações: {total_avaliacoes}\n"
-        f"Média Geral do Setor: {media_geral_setor:.2f}/5\n\n"
-        f"**Sentimentos das Avaliações**:\n{sentimentos_info}\n\n"
-        f"**Média das Habilidades**:\n{habilidades_info}\n\n"
-    )
-
-    try:
-        response = requests.post(
-            "https://api.x.ai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {XAI_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "grok-3-mini-beta",
-                "prompt": prompt,
-                "max_tokens": 1000,
-                "temperature": 0.7
-            }
-        )
-        response.raise_for_status()
-
-        result = response.json()
-        relatorio = result['choices'][0]['text'].strip()
-        logger.info(f"Relatório gerado para o setor ID {setor_id}")
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Erro ao chamar xAI API para relatório de setor: {str(e)}")
-        relatorio = "Erro ao gerar o relatório."
-    except Exception as e:
-        logger.error(f"Erro inesperado ao processar relatório de setor: {str(e)}")
-        relatorio = "Erro inesperado ao gerar o relatório."
-
-    return render_template(
-        'relatorio_setor.html',
-        setor=setor,
-        relatorio=relatorio,
-        usuario=g.usuario_logado
-    )
-
-
+# ... (outras rotas mantidas)
 
 @app.route('/analisar_comentarios_habilidades/<int:avaliacao_id>', methods=['POST'])
 def analisar_comentarios_habilidades(avaliacao_id):
@@ -806,12 +808,6 @@ def analisar_comentarios_habilidades(avaliacao_id):
 
     return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id) + '#analise-comentarios')
 
-from flask import session, redirect, url_for, flash, g
-from datetime import datetime
-import requests
-import logging
-
-logger = logging.getLogger(__name__)
 
 @app.route('/gerar_perguntas_feedback/<int:avaliacao_id>', methods=['POST'])
 def gerar_perguntas_feedback(avaliacao_id):
@@ -1191,7 +1187,7 @@ def get_detailed_evaluation_summary(avaliacao, itens, force_refresh=False):
                 "Content-Type": "application/json"
             },
             json={
-                "model": "grok-3-mini-beta",
+                "model": "grok-3",
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -1360,20 +1356,29 @@ def avaliar_funcionario():
     )
 
 
-def get_corrective_actions(avaliacao, itens):
-    # Estruturar os dados das habilidades com notas baixas
+def get_corrective_actions(avaliacao, itens, force_refresh=False):
     habilidades_baixas = [f"{item.categoria} - {item.nome_habilidade} ({item.nota}/5)" for item in itens if item.nota < 2.5]
     media_geral = sum(item.nota for item in itens) / len(itens) if itens else 0
 
-    # Verificar cache no Redis
     cache_key = f"acoes_corretivas:{avaliacao.id}:{media_geral:.2f}"
-    try:
-        cached_actions = redis_client.get(cache_key)
-        if cached_actions:
-            logger.debug(f"Ações corretivas encontradas no cache (Redis) para avaliação ID {avaliacao.id}")
-            return cached_actions.decode('utf-8') if isinstance(cached_actions, bytes) else cached_actions
-    except Exception as e:
-        logger.warning(f"Erro ao acessar o cache Redis: {str(e)}. Prosseguindo sem cache.")
+    
+    # Invalidar cache se force_refresh=True
+    if force_refresh:
+        try:
+            redis_client.delete(cache_key)
+            logger.debug(f"Cache Redis invalidado para chave: {cache_key}")
+        except Exception as e:
+            logger.warning(f"Erro ao invalidar cache Redis: {str(e)}")
+
+    # Verificar cache no Redis
+    if not force_refresh:
+        try:
+            cached_actions = redis_client.get(cache_key)
+            if cached_actions:
+                logger.debug(f"Ações corretivas encontradas no cache (Redis) para avaliação ID {avaliacao.id}")
+                return cached_actions.decode('utf-8') if isinstance(cached_actions, bytes) else cached_actions
+        except Exception as e:
+            logger.warning(f"Erro ao acessar o cache Redis: {str(e)}. Prosseguindo sem cache.")
 
     # Se não há habilidades com notas baixas, retornar uma resposta padrão
     if not habilidades_baixas:
@@ -1390,11 +1395,13 @@ def get_corrective_actions(avaliacao, itens):
         "Você é um assistente de RH que sugere ações corretivas para melhorar o desempenho de colaboradores. "
         "Com base nas informações fornecidas, gere exatamente 3 ações corretivas práticas e específicas para o colaborador. "
         "Considere o cargo, o setor e as habilidades com notas baixas (menores que 2.5). "
-        "As ações devem ser claras, profissionais e no formato:\n"
+        "As ações devem ser claras, profissionais e no formato exato:\n"
         "- Ação 1\n"
         "- Ação 2\n"
         "- Ação 3\n"
-        "Evite ações genéricas e foque em soluções práticas. Não retorne respostas vazias ou fora do formato."
+        "Evite ações genéricas, texto introdutório ou explicações adicionais. "
+        "Foque em soluções práticas, como treinamentos, mentorias ou tarefas específicas. "
+        "Certifique-se de que cada ação comece com '- ' e seja uma frase completa."
     )
     user_prompt = (
         f"**Informações do Colaborador**:\n"
@@ -1414,28 +1421,39 @@ def get_corrective_actions(avaliacao, itens):
                 "Content-Type": "application/json"
             },
             json={
-                "model": "grok-3-mini-beta",  # Alterado para o modelo que funcionou anteriormente
+                "model": "grok-3-mini-beta",
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                "max_tokens": 300,
-                "temperature": 0.7,
-                "timeout": 10  # Adicionado timeout para evitar chamadas pendentes
+                "max_tokens": 500,  # Aumentado para evitar truncamento
+                "temperature": 0.5,  # Reduzido para maior consistência
+                "timeout": 15  # Aumentado para respostas mais lentas
             }
         )
         response.raise_for_status()
 
         result = response.json()
         actions = result['choices'][0]['message']['content'].strip()
+        logger.debug(f"Resposta bruta da API: {actions}")
 
-        # Validar o formato das ações
+        # Extrair ações usando regex mais flexível
         actions_list = [line.strip() for line in actions.split('\n') if line.strip().startswith('- ')]
-        if len(actions_list) != 3 or not all(line.startswith('- ') for line in actions_list):
-            logger.warning(f"Resposta da API fora do formato esperado: {actions}")
-            actions = "- Nenhuma ação corretiva válida gerada. A API não retornou ações no formato esperado."
+        
+        # Validar o formato
+        if len(actions_list) >= 3 and all(line.startswith('- ') for line in actions_list):
+            # Usar as primeiras 3 ações
+            actions = '\n'.join(actions_list[:3])
+            logger.info(f"Ações corretivas válidas geradas para avaliação ID {avaliacao.id}")
         else:
-            actions = '\n'.join(actions_list)
+            # Tentar extrair ações com formato próximo (fallback)
+            fallback_actions = re.findall(r'^-?\s*(.+?)(?=\n|$)', actions, re.MULTILINE)
+            if len(fallback_actions) >= 3:
+                actions = '\n'.join(f"- {action.strip()}" for action in fallback_actions[:3])
+                logger.info(f"Ações corretivas recuperadas via fallback para avaliação ID {avaliacao.id}")
+            else:
+                logger.warning(f"Resposta da API fora do formato esperado: {actions}")
+                actions = "- Nenhuma ação corretiva válida gerada. A API não retornou ações no formato esperado."
 
         # Salvar no cache (Redis) com expiração de 7 dias
         try:
@@ -1449,7 +1467,7 @@ def get_corrective_actions(avaliacao, itens):
     except requests.exceptions.HTTPError as e:
         logger.error(f"Erro HTTP ao chamar xAI API: {str(e)}")
         logger.debug(f"Resposta da API: {e.response.text if e.response else 'Sem resposta'}")
-        return "- Não foi possível gerar ações corretivas devido a um erro na API."
+        return f"- Não foi possível gerar ações corretivas devido a um erro HTTP na API (código: {e.response.status_code if e.response else 'desconhecido'})."
     except requests.exceptions.RequestException as e:
         logger.error(f"Erro de rede ao chamar xAI API: {str(e)}")
         return "- Não foi possível gerar ações corretivas devido a um erro de rede."
@@ -1602,8 +1620,17 @@ def gerar_acao_corretiva(avaliacao_id):
         return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id))
 
     itens = AvaliacaoItem.query.filter_by(id_avaliacao=avaliacao_id).all()
-    acoes_corretivas = get_corrective_actions(avaliacao, itens)
-    
+    media_geral = sum(item.nota for item in itens) / len(itens) if itens else 0
+
+    # Invalidar cache
+    cache_key = f"acoes_corretivas:{avaliacao_id}:{media_geral:.2f}"
+    try:
+        redis_client.delete(cache_key)
+        logger.debug(f"Cache Redis invalidado para chave: {cache_key}")
+    except Exception as e:
+        logger.warning(f"Erro ao invalidar cache Redis: {str(e)}")
+
+    acoes_corretivas = get_corrective_actions(avaliacao, itens, force_refresh=True)
     flash('Ações corretivas geradas com sucesso!', 'success')
     return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id) + '#acoes')
 
@@ -1626,14 +1653,43 @@ def gerar_feedback_colaborador(avaliacao_id):
         return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id) + '#feedback')
 
     resumo = ultimo_resumo.resumo
+
+    # Limpar o feedback_status para permitir reenvio
+    if 'feedback_status' in session:
+        session.pop('feedback_status')
+
     try:
+        # Verificar se o template existe (para depuração)
+        template_path = os.path.join(app.root_path, 'templates/email', 'email_feedback.html')
+        if not os.path.exists(template_path):
+            raise FileNotFoundError(f"Template 'email_feedback.html' não encontrado em {template_path}")
+
+        # Gerar a data atual formatada
+        data_geracao = datetime.now().strftime('%d/%m/%Y %H:%M')
+
+        # Gerar a URL para o PDF
+        pdf_url = url_for('exportar_feedback_pdf', avaliacao_id=avaliacao_id, _external=True)
+
+        # Renderizar o corpo HTML do e-mail
+        html_content = render_template('email/email_feedback.html', 
+                                       avaliacao=avaliacao, 
+                                       resumo=resumo,
+                                       pdf_url=pdf_url,
+                                       data_geracao=data_geracao)
+
+        # Definir a versão em texto simples
+        texto_simples = f"Olá, {avaliacao.funcionario.nome},\n\nSegue o feedback da sua avaliação:\n\n{resumo}\n\nAtenciosamente,\nEquipe de Gestão"
+
+        # Enviar o e-mail
         msg = Message(
             subject=f"Feedback da Avaliação #{avaliacao.id}",
             sender=app.config['MAIL_DEFAULT_SENDER'],
-            recipients=[avaliacao.funcionario.email],
-            body=f"Olá, {avaliacao.funcionario.nome},\n\nSegue o feedback da sua avaliação:\n\n{resumo}\n\nAtenciosamente,\nEquipe de Gestão"
+            recipients=[avaliacao.funcionario.email]
         )
+        msg.body = texto_simples
+        msg.html = html_content
         mail.send(msg)
+
         session['feedback_status'] = f"Feedback enviado com sucesso para {avaliacao.funcionario.email}!"
         logger.info(f"Feedback enviado para {avaliacao.funcionario.email} (Avaliação ID {avaliacao_id})")
     except Exception as e:
@@ -1642,7 +1698,42 @@ def gerar_feedback_colaborador(avaliacao_id):
 
     return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id) + '#feedback')
 
+# Rota para exportar o feedback em PDF (mantida para contexto)
+@app.route('/exportar_feedback_pdf/<int:avaliacao_id>')
+def exportar_feedback_pdf(avaliacao_id):
+    if 'usuario_id' not in session:
+        logger.debug("Usuário não autenticado, redirecionando para login")
+        return redirect(url_for('login'))
 
+    avaliacao = Avaliacao.query.get_or_404(avaliacao_id)
+    if avaliacao.id_avaliador != g.usuario_logado.id and not g.usuario_logado.is_admin:
+        flash('Acesso negado: Você não tem permissão para exportar este feedback.', 'danger')
+        return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id))
+
+    # Verificar se o feedback foi gerado
+    feedback_content = session.get('feedback_colaborador')
+    if not feedback_content:
+        flash('Nenhum feedback gerado para exportar. Gere o feedback primeiro.', 'warning')
+        return redirect(url_for('analisar_observacao', avaliacao_id=avaliacao_id) + '#feedback')
+
+    # Renderizar o template HTML para o PDF
+    html_content = render_template('feedback_pdf.html', 
+                                   avaliacao=avaliacao, 
+                                   feedback_content=feedback_content)
+
+    # Gerar o PDF usando pdfkit
+    config = pdfkit.configuration(wkhtmltopdf='C:\\Program Files\\wkhtmltopdf\\bin\\wkhtmltopdf.exe')
+    pdf_content = pdfkit.from_string(html_content, False, configuration=config)
+    pdf_file = io.BytesIO(pdf_content)
+    pdf_file.seek(0)
+
+    # Enviar o PDF como resposta
+    return send_file(
+        pdf_file,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'feedback_colaborador_{avaliacao_id}.pdf'
+    )
 
 
 

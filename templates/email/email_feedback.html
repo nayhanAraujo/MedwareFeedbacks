@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feedback da Avaliação</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; color: #333333; background-color: #f4f4f4;">
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f4f4; padding: 20px;">
+        <tr>
+            <td align="center">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <!-- Cabeçalho -->
+                    <tr>
+                        <td style="padding: 30px 40px; background-color: #2c3e50; border-top-left-radius: 8px; border-top-right-radius: 8px; text-align: center;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: bold;">Feedback da Avaliação #{{ avaliacao.id }}</h1>
+                        </td>
+                    </tr>
+                    <!-- Corpo -->
+                    <tr>
+                        <td style="padding: 30px 40px;">
+                            <h2 style="color: #34495e; font-size: 20px; margin: 0 0 15px 0;">Olá, {{ avaliacao.funcionario.nome }}!</h2>
+                            <p style="font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                                Você recebeu um novo feedback referente à sua avaliação realizada em {{ avaliacao.data_avaliacao.strftime('%d/%m/%Y') }}. Confira os detalhes abaixo:
+                            </p>
+
+                            <!-- Informações Gerais -->
+                            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 20px;">
+                                <tr>
+                                    <td style="padding: 10px 0; font-size: 16px;">
+                                        <strong style="color: #34495e;">Funcionário Avaliado:</strong> {{ avaliacao.funcionario.nome }}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px 0; font-size: 16px;">
+                                        <strong style="color: #34495e;">Cargo:</strong> {{ avaliacao.funcionario.cargo }}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px 0; font-size: 16px;">
+                                        <strong style="color: #34495e;">Avaliador:</strong> {{ avaliacao.avaliador.nome }}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px 0; font-size: 16px;">
+                                        <strong style="color: #34495e;">Data da Avaliação:</strong> {{ avaliacao.data_avaliacao.strftime('%d/%m/%Y') }}
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Conteúdo do Resumo -->
+                            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 20px;">
+                                <h3 style="color: #34495e; font-size: 18px; margin: 0 0 15px 0;">Feedback</h3>
+                                <p style="font-size: 16px; line-height: 1.6; margin: 0;">
+                                    {{ resumo | replace('\n', '<br>') | safe }}
+                                </p>
+                            </div>
+
+                            <!-- Link para o PDF -->
+                            <p style="font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                                Você também pode baixar este feedback em PDF clicando no botão abaixo:
+                            </p>
+                            <a href="{{ pdf_url }}" style="display: inline-block; padding: 10px 20px; background-color: #3498db; color: #ffffff; text-decoration: none; border-radius: 5px; font-size: 16px;">
+                                Baixar PDF
+                            </a>
+                        </td>
+                    </tr>
+                    <!-- Rodapé -->
+                    <tr>
+                        <td style="padding: 20px 40px; background-color: #ecf0f1; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; text-align: center;">
+                            <p style="font-size: 14px; color: #777777; margin: 0 0 5px 0;">
+                                Enviado por Sistema de Avaliação de Colaboradores
+                            </p>
+                            <p style="font-size: 14px; color: #777777; margin: 0;">
+                                Gerado em: {{ data_geracao }}
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

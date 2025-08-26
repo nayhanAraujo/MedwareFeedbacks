@@ -3,179 +3,379 @@
 <head>
   <meta charset="UTF-8">
   <style>
-
-body {
-    margin: 5px 15px; /* Reduz a margem superior de 20px para 5px */
-    padding: 0;
-  }
-  
-  .header {
-    margin-top: -10px; /* Remove qualquer margem superior */
-    padding-top: 0; /* Remove padding superior */
-    border-bottom: 1px solid #ddd;
-    position:relative;
-    top:-5px;
-    padding-bottom: 5px;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start; /* Alinha itens no topo */
-  }
-  
-  .logo-image {
-    height: 80px; /* Ajuste conforme necessário */
-    margin-top: 0; /* Remove margem superior da logo */
-  }
-  
-  .report-info {
-    font-size: 15px;
-    color: #666;
-    text-align: right;
-    margin-top: 0; /* Remove margem superior */
-    padding-top: 0; /* Remove padding superior */
-  }
-    h1, h2, h3 { color: #333; }
-    .subtitulo { font-weight: bold; margin-top: 10px; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background-color: #f2f2f2; }
-    .item-avaliacao { margin-left: 20px; margin-bottom: 10px; }
-    .section-divider { page-break-before: always; }
-    .text-muted { color: #666; font-style: italic; }
-    .chart-container {
-    display: flex;
-    justify-content: space-between; /* Distribui os gráficos horizontalmente */
-    margin: 20px 0;
-    width: 100%; /* Garante que o container ocupa toda a largura */
-  }
-  .chart {
-    flex: 1; /* Cada gráfico ocupa a mesma proporção do espaço */
-    text-align: center;
-  }
-  .chart img {
-    max-width: 100%; /* Garante que a imagem não extrapole o container */
-    height: auto;
-  }
+    @page {
+      size: A4;
+      margin: 20mm;
+      @top-center {
+        content: element(header);
+      }
+      @bottom-center {
+        content: element(footer);
+      }
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Helvetica', 'Arial', sans-serif;
+      color: #333;
+      background-color: #f9f9f9;
+    }
+    .header {
+      position: running(header);
+      width: 100%;
+      padding: 15px 0;
+      border-bottom: 2px solid #1a73e8;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: #fff;
+    }
+    .logo-image {
+      height: 50px;
+      margin-left: 0px;
+    }
+    .header-title {
+      font-size: 16px;
+      font-weight: bold;
+      color: #1a73e8;
+      margin-right: 50px;
+      margin-left: 50px;
+    }
+    .footer {
+      position: running(footer);
+      width: 100%;
+      text-align: center;
+      font-size: 10px;
+      color: #666;
+      padding: 10px 0;
+      border-top: 1px solid #ddd;
+    }
+    .footer::after {
+      content: "Página " counter(page) " de " counter(pages);
+    }
+    .container {
+      margin: 20px;
+      background-color: #fff;
+      padding: 20px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      border-radius: 8px;
+    }
+    .report-info {
+      font-size: 12px;
+      color: #666;
+      text-align: right;
+      margin-bottom: 15px;
+    }
+    h1, h2, h3 {
+      color: #1a73e8;
+    }
+    h1 {
+      font-size: 24px;
+      margin-bottom: 10px;
+      border-bottom: 2px solid #e0e0e0;
+      padding-bottom: 5px;
+    }
+    h2 {
+      font-size: 18px;
+      margin-top: 20px;
+      margin-bottom: 10px;
+      border-left: 4px solid #1a73e8;
+      padding-left: 10px;
+    }
+    h3 {
+      font-size: 14px;
+      margin-bottom: 5px;
+    }
+    .executive-summary {
+      background-color: #e8f0fe;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      color: #333;
+      border-left: 5px solid #1a73e8;
+    }
+    .key-metrics {
+      display: flex;
+      justify-content: space-between;
+      background-color: #f1f3f4;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      color: #333;
+      border-left: 5px solid #1a73e8;
+    }
+    .metric {
+      text-align: center;
+    }
+    .metric strong {
+      display: block;
+      font-size: 16px;
+      color: #1a73e8;
+    }
+    .text-muted {
+      color: #666;
+      font-style: italic;
+      font-size: 12px;
+    }
+    .chart-row {
+      display: flex;
+      justify-content: space-between;
+      margin: 15px 0;
+      width: 100%;
+      gap: 15px;
+    }
+    .chart {
+      flex: 1;
+      text-align: center;
+      max-width: 45%;
+    }
+    .chart img {
+      max-width: 90%; /* Aumentar para preencher mais espaço */
+      height: auto;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      font-size: 12px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background-color: #1a73e8;
+      color: #fff;
+      font-weight: bold;
+    }
+    tr:nth-child(even) {
+      background-color: #f5f5f5;
+    }
+    .subtitulo {
+      font-weight: bold;
+      font-size: 14px;
+      margin-top: 15px;
+      color: #333;
+    }
+    .item-avaliacao {
+      margin-left: 20px;
+      margin-bottom: 10px;
+      font-size: 12px;
+    }
+    .resumo-detalhado {
+      margin-top: 15px;
+      margin-bottom: 20px;
+      padding: 15px;
+      background-color: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 12px;
+    }
+    .resumo-detalhado p {
+      margin: 5px 0;
+      white-space: pre-wrap;
+    }
+    .resumo-detalhado strong {
+      color: #1a73e8;
+    }
+    .section-divider {
+      page-break-before: always;
+    }
   </style>
 </head>
 <body>
-  <!-- Cabeçalho com logo -->
+  <!-- Cabeçalho -->
   <div class="header">
     <img class="logo-image" src="{{ url_for('static', filename='img/logo.png', _external=True) }}" alt="MEDWARE Feedback">
-    
-    <div class="report-info">
-      Relatório Gerado em: {{ data_geracao }}<br>
-      Por: {{ usuario.nome if usuario else 'Sistema' }}
-    </div>
+    <div class="header-title">Relatório Completo de Avaliações</div>
   </div>
 
-  <h1 class="report-title">Relatório Completo de Avaliações</h1>  <p class="text-muted">
-    Filtros aplicados:
-    {% if setor_filtro %}Setor: {{ setor_filtro }}{% endif %}
-    {% if nome_filtro %}, Nome: {{ nome_filtro }}{% endif %}
-    {% if media_min %}, Média Mínima: {{ media_min }}{% endif %}
-    {% if media_max %}, Média Máxima: {{ media_max }}{% endif %}
-    {% if not setor_filtro and not nome_filtro and not media_min and not media_max %}Nenhum{% endif %}
-  </p>
-
-  <!-- Seção de Gráficos -->
-  <h2>Visão Geral</h2>
-  <div class="chart-container">
-    <div class="chart" style="flex: 1;">
-      {% if bar_chart_base64 %}
-        <h3>Média por Colaborador</h3>
-        <img src="data:image/png;base64,{{ bar_chart_base64 }}" alt="Gráfico de Média por Colaborador" style="max-width: 100%; height: auto;">
-      {% else %}
-        <p class="text-muted">Nenhum dado disponível para o gráfico de média por colaborador.</p>
-      {% endif %}
-    </div>
-    <div class="chart" style="flex: 1;">
-      {% if pie_chart_base64 %}
-        <h3>Distribuição de Médias</h3>
-        <img src="data:image/png;base64,{{ pie_chart_base64 }}" alt="Gráfico de Distribuição de Médias" style="max-width: 100%; height: auto;">
-      {% else %}
-        <p class="text-muted">Nenhum dado disponível para o gráfico de distribuição.</p>
-      {% endif %}
-    </div>
+  <!-- Rodapé -->
+  <div class="footer">
+    Gerado em: {{ data_geracao }} | Por: {{ usuario.nome if usuario else 'Sistema' }}
   </div>
 
-  <div class="section-divider"></div>
+  <!-- Conteúdo -->
+  <div class="container">
+    <!-- Resumo Executivo -->
+    <div class="executive-summary">
+      <strong>Resumo Executivo:</strong><br>
+      Este relatório apresenta uma análise detalhada das avaliações de desempenho dos colaboradores, com base em {{ dados_dashboard | length }} colaboradores avaliados.
+      A média geral observada foi de {{ (dados_dashboard | sum(attribute='media_geral')) / (dados_dashboard | length) | round(2) if dados_dashboard else 0 }}.
+      Identificamos pontos fortes e áreas a melhorar, com sugestões específicas para o desenvolvimento da equipe.
+    </div>
 
-  <!-- Resumo por Colaborador -->
-  <h2>Resumo por Colaborador</h2>
-  {% if dados_dashboard %}
-    <table>
-      <thead>
-        <tr>
-          <th>Nome</th>
-          <th>Cargo</th>
-          <th>Setor</th>
-          <th>Qtd. Avaliações</th>
-          <th>Média Geral</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for d in dados_dashboard %}
-        <tr>
-          <td>{{ d.nome }}</td>
-          <td>{{ d.cargo }}</td>
-          <td>{{ d.setor }}</td>
-          <td>{{ d.total_avaliacoes }}</td>
-          <td>{{ d.media_geral }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p class="text-muted">Nenhum colaborador com avaliações encontrado para os filtros aplicados.</p>
-  {% endif %}
+    <!-- Métricas-Chave -->
+    <div class="key-metrics">
+      <div class="metric">
+        <strong>{{ dados_dashboard | length }}</strong>
+        Colaboradores Avaliados
+      </div>
+      <div class="metric">
+        <strong>{{ (dados_dashboard | sum(attribute='media_geral')) / (dados_dashboard | length) | round(2) if dados_dashboard else 0 }}</strong>
+        Média Geral
+      </div>
+      <div class="metric">
+        <strong>{{ dados_avaliacoes | length }}</strong>
+        Total de Avaliações
+      </div>
+    </div>
 
-  <div class="section-divider"></div>
+    <!-- Filtros Aplicados -->
+    <p class="text-muted">
+      Filtros aplicados:
+      {% if setor_filtro %}Setor: {{ setor_filtro }}{% endif %}
+      {% if nome_filtro %}, Nome: {{ nome_filtro }}{% endif %}
+      {% if media_min %}, Média Mínima: {{ media_min }}{% endif %}
+      {% if media_max %}, Média Máxima: {{ media_max }}{% endif %}
+      {% if not setor_filtro and not nome_filtro and not media_min and not media_max %}Nenhum{% endif %}
+    </p>
 
-  <!-- Detalhamento das Avaliações -->
-  <h2>Detalhamento das Avaliações</h2>
-  {% if dados_avaliacoes %}
-    {% for av in dados_avaliacoes %}
-      <p class="subtitulo">{{ av.funcionario }} - Avaliado por {{ av.avaliador }} em {{ av.data }}</p>
-      <ul class="item-avaliacao">
-        {% for item in av.itens %}
-          <li><strong>{{ item.nome_habilidade }}</strong>: {{ item.nota }}/5 ({{ item.categoria }})</li>
-        {% endfor %}
-      </ul>
-      {% if av.observacoes %}
-      <p class="item-avaliacao"><strong>Observações:</strong> {{ av.observacoes }}</p>
-      {% endif %}
-    {% endfor %}
-  {% else %}
-    <p class="text-muted">Nenhuma avaliação encontrada para os filtros aplicados.</p>
-  {% endif %}
+    <!-- Seção de Gráficos -->
+    <h2>Visão Geral</h2>
+    <!-- Primeira Linha de Gráficos -->
+    <div class="chart-row">
+      <div class="chart">
+        {% if bar_chart_base64 %}
+          <h3>Média por Colaborador</h3>
+          <img src="data:image/png;base64,{{ bar_chart_base64 }}" alt="Gráfico de Média por Colaborador">
+        {% else %}
+          <p class="text-muted">Nenhum dado disponível para o gráfico de média por colaborador. Verifique os filtros ou adicione avaliações.</p>
+        {% endif %}
+      </div>
+      <div class="chart">
+        {% if histogram_base64 %}
+          <h3>Distribuição de Médias</h3>
+          <img src="data:image/png;base64,{{ histogram_base64 }}" alt="Histograma de Distribuição de Médias">
+        {% else %}
+          <p class="text-muted">Nenhum dado disponível para o histograma de distribuição. Verifique os filtros ou adicione avaliações.</p>
+        {% endif %}
+      </div>
+    </div>
+    <!-- Segunda Linha de Gráficos -->
+    <div class="chart-row">
+      <div class="chart">
+        {% if radar_chart_base64 %}
+          <h3>Média por Categoria (Radar)</h3>
+          <img src="data:image/png;base64,{{ radar_chart_base64 }}" alt="Gráfico de Média por Categoria (Radar)">
+        {% else %}
+          <p class="text-muted">
+            {% if categorias | length < 3 and categorias | length > 0 %}
+              Número insuficiente de categorias ({{ categorias | length }}). São necessárias pelo menos 3 categorias para o gráfico de radar.
+            {% else %}
+              Nenhum dado disponível para o gráfico de média por categoria (radar). Verifique os filtros ou adicione avaliações.
+            {% endif %}
+          </p>
+        {% endif %}
+      </div>
+      <div class="chart">
+        {% if category_bar_chart_base64 %}
+          <h3>Média por Categoria (Barras)</h3>
+          <img src="data:image/png;base64,{{ category_bar_chart_base64 }}" alt="Gráfico de Média por Categoria (Barras)">
+        {% else %}
+          <p class="text-muted">Nenhum dado disponível para o gráfico de média por categoria (barras). Verifique os filtros ou adicione avaliações.</p>
+        {% endif %}
+      </div>
+    </div>
 
-  <div class="section-divider"></div>
+    <!-- Divisor para a próxima página -->
+    <div class="section-divider"></div>
 
-  <!-- Resumo de Habilidades -->
-  <h2>Resumo de Habilidades</h2>
-  {% if resumo_habilidades %}
-    <table>
-      <thead>
-        <tr>
-          <th>Habilidade</th>
-          <th>Categoria</th>
-          <th>Média</th>
-          <th>Total Avaliações</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for h in resumo_habilidades %}
-        <tr>
-          <td>{{ h.nome_habilidade }}</td>
-          <td>{{ h.categoria }}</td>
-          <td>{{ h.media }}</td>
-          <td>{{ h.total }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p class="text-muted">Nenhum dado de habilidades disponível para os filtros aplicados.</p>
-  {% endif %}
+    <!-- Resumo por Colaborador -->
+    <h2>Resumo por Colaborador</h2>
+    {% if dados_dashboard %}
+      <table>
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>Cargo</th>
+            <th>Setor</th>
+            <th>Qtd. Avaliações</th>
+            <th>Média Geral</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in dados_dashboard %}
+          <tr>
+            <td>{{ d.nome }}</td>
+            <td>{{ d.cargo }}</td>
+            <td>{{ d.setor }}</td>
+            <td>{{ d.total_avaliacoes }}</td>
+            <td>{{ d.media_geral }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="text-muted">Nenhum colaborador com avaliações encontrado para os filtros aplicados.</p>
+    {% endif %}
+
+    <!-- Resumo Detalhado das Avaliações -->
+    <h2>Resumo Detalhado das Avaliações</h2>
+    {% if dados_avaliacoes %}
+      {% for av in dados_avaliacoes %}
+        <div class="resumo-detalhado">
+          <p class="subtitulo">{{ av.funcionario }} - Avaliado por {{ av.avaliador }} em {{ av.data }}</p>
+          <p>{{ av.resumo_detalhado | replace('\n', '<br>') | safe }}</p>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="text-muted">Nenhuma avaliação disponível para gerar resumos detalhados.</p>
+    {% endif %}
+
+    <div class="section-divider"></div>
+
+    <!-- Detalhamento das Avaliações -->
+    <h2>Detalhamento das Avaliações</h2>
+    {% if dados_avaliacoes %}
+      {% for av in dados_avaliacoes %}
+        <p class="subtitulo">{{ av.funcionario }} - Avaliado por {{ av.avaliador }} em {{ av.data }}</p>
+        <ul class="item-avaliacao">
+          {% for item in av.itens %}
+            <li><strong>{{ item.nome_habilidade }}</strong>: {{ item.nota }}/5 ({{ item.categoria }})</li>
+          {% endfor %}
+        </ul>
+        {% if av.observacoes %}
+        <p class="item-avaliacao"><strong>Observações:</strong> {{ av.observacoes }}</p>
+        {% endif %}
+      {% endfor %}
+    {% else %}
+      <p class="text-muted">Nenhuma avaliação encontrada para os filtros aplicados.</p>
+    {% endif %}
+
+    <div class="section-divider"></div>
+
+    <!-- Resumo de Habilidades -->
+    <h2>Resumo de Habilidades</h2>
+    {% if resumo_habilidades %}
+      <table>
+        <thead>
+          <tr>
+            <th>Habilidade</th>
+            <th>Categoria</th>
+            <th>Média</th>
+            <th>Total Avaliações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for h in resumo_habilidades %}
+          <tr>
+            <td>{{ h.nome_habilidade }}</td>
+            <td>{{ h.categoria }}</td>
+            <td>{{ h.media }}</td>
+            <td>{{ h.total }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="text-muted">Nenhum dado de habilidades disponível para os filtros aplicados.</p>
+    {% endif %}
+  </div>
 </body>
 </html>
